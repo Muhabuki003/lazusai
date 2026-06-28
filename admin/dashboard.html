@@ -3,26 +3,28 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LazusAI · Admin</title>
+<title>LAZUS AI · Admin</title>
 <style>
   :root {
-    --bg: #07070b;
-    --panel: #0e0e15;
-    --panel-2: #14141f;
-    --line: #1f1f2e;
-    --text: #e9e9f2;
-    --muted: #8a8aa3;
-    --accent: #7c5cff;
-    --accent-2: #00e0c6;
-    --warn: #ff5c7c;
-    --ok: #38d39f;
+    --bg: #fbf9f4;          /* light cream */
+    --panel: #ffffff;
+    --panel-2: #ffffff;
+    --line: #ececec;
+    --text: #16161c;
+    --muted: #74747f;
+    --accent: #e8312a;      /* LAZUS AI red */
+    --accent-soft: #fdecea;
+    --ink: #16161c;         /* near-black */
+    --warn: #e8312a;
+    --ok: #1faf6b;
     --radius: 16px;
+    --shadow: 0 6px 22px rgba(20,20,30,.06);
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background:
-      radial-gradient(1200px 600px at 80% -10%, rgba(124,92,255,.18), transparent 60%),
-      radial-gradient(900px 500px at -10% 110%, rgba(0,224,198,.12), transparent 55%),
+    margin: 0;
+    background:
+      radial-gradient(900px 480px at 88% -8%, rgba(232,49,42,.06), transparent 60%),
       var(--bg);
     color: var(--text);
     font-family: ui-sans-serif, -apple-system, "Inter", "Segoe UI", system-ui, sans-serif;
@@ -31,76 +33,114 @@
   }
   header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 28px 40px; border-bottom: 1px solid var(--line);
-    backdrop-filter: blur(8px);
+    padding: 22px 40px; border-bottom: 1px solid var(--line);
+    background: rgba(255,255,255,.7); backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 10;
   }
-  .brand { display: flex; align-items: baseline; gap: 14px; }
-  .brand h1 { font-size: 22px; letter-spacing: .14em; margin: 0; font-weight: 700; }
-  .brand .dot { color: var(--accent); }
-  .brand .client { color: var(--muted); font-size: 13px; letter-spacing: .18em; text-transform: uppercase; }
+  .brand { display: flex; align-items: center; gap: 16px; }
+  .brand .logo { height: 46px; width: auto; display: block; }
+  .brand .client {
+    color: var(--muted); font-size: 12px; letter-spacing: .18em; text-transform: uppercase;
+    padding-left: 16px; border-left: 1px solid var(--line);
+  }
   .status-pill {
-    display: inline-flex; align-items: center; gap: 8px; font-size: 13px;
+    display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
     padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line);
-    background: var(--panel); cursor: pointer; user-select: none;
+    background: var(--panel); cursor: pointer; user-select: none; box-shadow: var(--shadow);
   }
-  .status-pill .led { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 12px var(--ok); }
-  .status-pill.off .led { background: var(--warn); box-shadow: 0 0 12px var(--warn); }
+  .status-pill .led { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgba(31,175,107,.15); }
+  .status-pill.off .led { background: var(--warn); box-shadow: 0 0 0 3px rgba(232,49,42,.15); }
   main { padding: 32px 40px 80px; max-width: 1280px; margin: 0 auto; }
   .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; }
   @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
   .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
   .card {
-    background: linear-gradient(180deg, var(--panel-2), var(--panel));
-    border: 1px solid var(--line); border-radius: var(--radius); padding: 22px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 22px; box-shadow: var(--shadow); position: relative; overflow: hidden;
   }
+  .card::after { content:""; position:absolute; top:0; left:0; width:4px; height:100%; background:var(--accent); opacity:.9; }
   .card .label { color: var(--muted); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
-  .card .value { font-size: 38px; font-weight: 700; margin-top: 8px;
-    background: linear-gradient(90deg, var(--text), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .card .value { font-size: 40px; font-weight: 800; margin-top: 6px; color: var(--ink); }
   .panel {
-    background: linear-gradient(180deg, var(--panel-2), var(--panel));
-    border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; margin-bottom: 24px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 24px; margin-bottom: 24px; box-shadow: var(--shadow);
   }
-  .panel h2 { font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 18px; font-weight: 600; }
+  .panel h2 { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 18px; font-weight: 700; }
   .feed { max-height: 520px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
-  .turn { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); }
-  .turn.user { border-left: 3px solid var(--accent); }
-  .turn.assistant { border-left: 3px solid var(--accent-2); }
+  .turn { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: #fcfcfd; }
+  .turn.user { border-left: 3px solid var(--ink); }
+  .turn.assistant { border-left: 3px solid var(--accent); background: var(--accent-soft); }
   .turn .meta { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; margin-bottom: 6px; }
   .turn .body { font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
-  .lead { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); margin-bottom: 10px; }
-  .lead .who { font-weight: 600; }
+  .lead { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: #fcfcfd; margin-bottom: 10px; }
+  .lead .who { font-weight: 700; }
   .lead .when { font-size: 11px; color: var(--muted); }
   .lead .what { font-size: 13px; color: var(--text); margin-top: 4px; }
-  .lead.escalated { border-left: 3px solid var(--warn); }
-  label { display: block; font-size: 12px; color: var(--muted); margin: 14px 0 6px; letter-spacing: .04em; }
+  .lead.escalated { border-left: 3px solid var(--accent); background: var(--accent-soft); }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 14px 0 6px; letter-spacing: .04em; font-weight: 600; }
   textarea, input {
-    width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text);
+    width: 100%; background: #fff; border: 1px solid var(--line); color: var(--text);
     border-radius: 10px; padding: 12px; font-family: inherit; font-size: 13px; resize: vertical;
   }
+  textarea:focus, input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(232,49,42,.12); }
   textarea { min-height: 90px; }
   .row { display: flex; gap: 12px; flex-wrap: wrap; }
   button {
-    border: none; border-radius: 10px; padding: 12px 18px; font-weight: 600; cursor: pointer;
-    font-size: 13px; letter-spacing: .03em; transition: transform .08s ease, opacity .2s;
+    border: none; border-radius: 10px; padding: 12px 18px; font-weight: 700; cursor: pointer;
+    font-size: 13px; letter-spacing: .03em; transition: transform .08s ease, opacity .2s, box-shadow .2s;
   }
   button:active { transform: translateY(1px); }
-  .btn-primary { background: linear-gradient(90deg, var(--accent), #5a3cff); color: white; }
-  .btn-ghost { background: var(--panel); color: var(--text); border: 1px solid var(--line); }
-  .btn-warn { background: var(--panel); color: var(--warn); border: 1px solid var(--warn); }
+  .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(232,49,42,.28); }
+  .btn-primary:hover { box-shadow: 0 6px 18px rgba(232,49,42,.34); }
+  .btn-ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+  .btn-ghost:hover { border-color: #d6d6d6; }
+  .btn-warn { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
+  .btn-warn:hover { background: var(--accent-soft); }
   .toast {
     position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
-    background: var(--panel-2); border: 1px solid var(--line); padding: 12px 20px;
-    border-radius: 999px; font-size: 13px; opacity: 0; transition: opacity .3s; pointer-events: none;
+    background: var(--ink); color: #fff; border: 1px solid var(--ink); padding: 12px 20px;
+    border-radius: 999px; font-size: 13px; opacity: 0; transition: opacity .3s; pointer-events: none; box-shadow: var(--shadow);
   }
   .toast.show { opacity: 1; }
   .muted { color: var(--muted); font-size: 13px; }
-  ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
+  ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-thumb { background: #e2e2e2; border-radius: 8px; }
 </style>
 </head>
 <body>
 <header>
   <div class="brand">
-    <h1>LAZUS<span class="dot">·</span>AI</h1>
+    <!-- LAZUS AI logo (inline SVG so it ships in the Worker bundle, no extra
+         request). To use the exact official raster instead, base64-encode the
+         PNG and replace this whole <svg> with:
+         <img class="logo" alt="LAZUS AI" src="data:image/png;base64,PASTE_HERE">
+         then run `npm run build`. The standalone vector is at
+         admin/assets/lazus-ai-logo.svg. -->
+    <svg class="logo" viewBox="0 0 600 150" role="img" aria-label="LAZUS AI">
+      <g transform="translate(20 18)">
+        <path d="M16 10 H44 L30 24 H16 Z" fill="#111"/>
+        <path d="M104 10 H76 L90 24 H104 Z" fill="#111"/>
+        <path d="M8 18 V44 L20 32 V30 Z" fill="#111"/>
+        <path d="M112 18 V44 L100 32 V30 Z" fill="#111"/>
+        <path d="M16 104 H44 L30 90 H16 Z" fill="#111"/>
+        <path d="M104 104 H76 L90 90 H104 Z" fill="#111"/>
+        <path d="M8 96 V70 L20 82 V84 Z" fill="#111"/>
+        <path d="M112 96 V70 L100 82 V84 Z" fill="#111"/>
+        <line x1="60" y1="22" x2="60" y2="10" stroke="#e8312a" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="60" cy="8" r="5" fill="#e8312a"/>
+        <path d="M34 24 H86 a14 14 0 0 1 14 14 V70 a14 14 0 0 1 -14 14 H52 l-12 14 v-14 H34 a14 14 0 0 1 -14 -14 V38 a14 14 0 0 1 14 -14 Z" fill="#e8312a"/>
+        <path d="M40 52 q9 -12 18 0" fill="none" stroke="#1a1a1a" stroke-width="5" stroke-linecap="round"/>
+        <path d="M62 52 q9 -12 18 0" fill="none" stroke="#1a1a1a" stroke-width="5" stroke-linecap="round"/>
+        <path d="M48 64 q12 12 24 0" fill="none" stroke="#1a1a1a" stroke-width="5" stroke-linecap="round"/>
+        <g transform="translate(78 66)">
+          <path d="M6 0 H34 a8 8 0 0 1 8 8 V20 a8 8 0 0 1 -8 8 H18 l-8 9 v-9 H6 a8 8 0 0 1 -8 -8 V8 a8 8 0 0 1 8 -8 Z" fill="#e8312a"/>
+          <circle cx="12" cy="14" r="3" fill="#fff"/>
+          <circle cx="20" cy="14" r="3" fill="#fff"/>
+          <circle cx="28" cy="14" r="3" fill="#fff"/>
+        </g>
+      </g>
+      <text x="150" y="98" font-family="Inter, Segoe UI, system-ui, sans-serif" font-weight="800" font-size="78" letter-spacing="6" fill="#111">LAZUS</text>
+      <text x="478" y="98" font-family="Inter, Segoe UI, system-ui, sans-serif" font-weight="800" font-size="78" letter-spacing="6" fill="#e8312a">AI</text>
+    </svg>
     <span class="client" id="clientLabel">__LAZUSAI_CLIENT_ID__</span>
   </div>
   <div class="status-pill" id="statusPill" onclick="toggleActive()">
@@ -191,7 +231,7 @@
       el.innerHTML = turns.slice().reverse().map(t => {
         const when = t.ts ? new Date(t.ts * 1000).toLocaleString() : '';
         const role = t.role === 'assistant' ? 'assistant' : 'user';
-        return `<div class="turn ${role}"><div class="meta"><span>${role === 'assistant' ? '🤖 LazusAI' : '👤 ' + esc(t.sender || 'customer')}</span><span>${when}</span></div><div class="body">${esc(t.text)}</div></div>`;
+        return `<div class="turn ${role}"><div class="meta"><span>${role === 'assistant' ? '🤖 LAZUS AI' : '👤 ' + esc(t.sender || 'customer')}</span><span>${when}</span></div><div class="body">${esc(t.text)}</div></div>`;
       }).join('');
       document.getElementById('msgCount').textContent = turns.filter(isToday).length;
     } catch (e) { document.getElementById('feed').innerHTML = `<div class="muted">Feed unavailable (${e.message})</div>`; }
