@@ -1,0 +1,36 @@
+{
+  "name": "LazusAI — WF2 Owner Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lazusai-owner-alert/:client_id",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "wf2-webhook",
+      "name": "Alert Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "lazusai-owner-alert"
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Owner alert + lead capture. Fires when an inbound was escalated OR when the\n// message contains lead info (name / phone / email). Sends Telegram to the\n// owner and logs the lead via the core API.\n\nconst http = this.helpers.httpRequest;\nconst env = (k, d='') => ($env[k] ?? d);\nconst CORE = env('CORE_API_URL', 'http://127.0.0.1:8003').replace(/\\/$/, '');\nconst TG_TOKEN = env('TELEGRAM_BOT_TOKEN', '');\nconst KEY = env('LAZUSAI_CORE_KEY', '');\nconst hdr = { 'X-LazusAI-Key': KEY, 'Content-Type': 'application/json' };\n\nconst inItem = $input.first().json;\nconst clientId = (inItem.params && inItem.params.client_id) || inItem.client_id;\nconst data = inItem.body || inItem;\nconst text = data.message || '';\n\n// Detect lead info.\nconst emailM = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/);\nconst phoneM = text.match(/(\\+?\\d[\\d\\s().-]{7,}\\d)/);\nconst nameM = text.match(/(?:my name is|i am|i'm|this is)\\s+([A-Z][a-z]+(?:\\s+[A-Z][a-z]+)?)/i);\nconst hasLead = !!(emailM || phoneM || nameM);\nconst escalated = !!data.escalated;\n\nif (!hasLead && !escalated) {\n  return [{ json: { skipped: true, reason: 'no_lead_no_escalation' } }];\n}\n\n// Load config for owner_telegram + business name.\nconst cfg = await http({ method: 'GET', url: `${CORE}/clients/${clientId}/config`, headers: hdr, json: true });\nconst lead = {\n  sender: data.sender || '',\n  name: nameM ? nameM[1] : '',\n  phone: phoneM ? phoneM[1].trim() : (data.sender || ''),\n  email: emailM ? emailM[0] : '',\n  message: text,\n  ai_response: data.reply || '',\n  summary: (nameM ? nameM[1] + ' — ' : '') + text.slice(0, 140),\n  escalated\n};\n\n// Log the lead (file + ChromaDB).\nawait http({ method: 'POST', url: `${CORE}/clients/${clientId}/leads`, headers: hdr, body: lead, json: true });\n\n// Notify the owner over Telegram.\nconst chatId = (cfg.owner_telegram || '').replace(/^@/, '');\nconst actionNeeded = escalated ? '⚠️ ESCALATED — needs human reply' : '🟢 New lead captured';\nconst msg = `*${cfg.business_name}* — ${actionNeeded}\\n\\n` +\n  `👤 Customer: ${lead.name || lead.sender}\\n` +\n  (lead.phone ? `📞 ${lead.phone}\\n` : '') +\n  (lead.email ? `✉️ ${lead.email}\\n` : '') +\n  `\\n❓ Asked: ${text}\\n\\n🤖 AI replied: ${lead.ai_response || '(none)'}`;\n\nif (TG_TOKEN && chatId) {\n  await http({ method: 'POST', url: `https://api.telegram.org/bot${TG_TOKEN}/sendMessage`,\n    body: { chat_id: chatId, text: msg, parse_mode: 'Markdown' }, json: true });\n}\n\nreturn [{ json: { ok: true, client_id: clientId, escalated, lead } }];"
+      },
+      "id": "wf2-orchestrator",
+      "name": "Alert & Lead Capture",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 300]
+    }
+  ],
+  "connections": {
+    "Alert Webhook": { "main": [[{ "node": "Alert & Lead Capture", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [{ "name": "lazusai" }]
+}

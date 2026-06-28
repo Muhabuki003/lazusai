@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lazusai.com/schemas/client.json",
+  "title": "LazusAI Client Config",
+  "type": "object",
+  "required": [
+    "client_id",
+    "business_name",
+    "industry",
+    "apple_id_number",
+    "bluebubbles_chat_guid",
+    "owner_telegram",
+    "active"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "client_id": {
+      "type": "string",
+      "description": "Stable slug, unique per tenant (e.g. acme-plumbing).",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$"
+    },
+    "business_name": { "type": "string" },
+    "industry": { "type": "string" },
+    "apple_id_number": {
+      "type": "string",
+      "description": "Phone/Apple ID linked to the BlueBubbles account that receives this client's iMessages. Primary tenant routing key.",
+      "pattern": "^\\+?[0-9]{7,15}$"
+    },
+    "bluebubbles_chat_guid": {
+      "type": "string",
+      "description": "Optional explicit chat GUID for routing (e.g. iMessage;-;+15551234567)."
+    },
+    "owner_telegram": {
+      "type": "string",
+      "description": "Telegram chat id or @handle for owner alerts and summaries."
+    },
+    "hours": {
+      "type": "object",
+      "description": "Day -> open/close, e.g. {\"mon\": \"08:00-17:00\", \"sun\": \"closed\"}.",
+      "additionalProperties": { "type": "string" }
+    },
+    "services": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "pricing": {
+      "type": "object",
+      "description": "Service/item -> price string, e.g. {\"drain cleaning\": \"$120\"}.",
+      "additionalProperties": { "type": "string" }
+    },
+    "faqs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["q", "a"],
+        "additionalProperties": false,
+        "properties": {
+          "q": { "type": "string" },
+          "a": { "type": "string" }
+        }
+      }
+    },
+    "escalation_keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "If any appears in an inbound message, flag for a human."
+    },
+    "ai_personality": {
+      "type": "string",
+      "description": "Free-form persona/tone used to build the system prompt."
+    },
+    "dashboard_user": {
+      "type": "string",
+      "description": "Admin dashboard Basic-auth username (password lives only in KV)."
+    },
+    "active": { "type": "boolean", "default": true },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}

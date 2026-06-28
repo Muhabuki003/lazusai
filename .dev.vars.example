@@ -1,0 +1,5 @@
+# Cloudflare Worker local dev secrets (copy to .dev.vars; gitignored).
+# Production: set with `npx wrangler secret put <NAME>`.
+N8N_API_KEY=shared-secret-between-worker-n8n-core
+CORE_API_URL=https://core.lazusai.com
+N8N_BASE_URL=https://n8n.bookistudios.com

@@ -1,0 +1,22 @@
+node_modules/
+.wrangler/
+.dev.vars
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Whisper model cache
+server/whisper_service/models/
+
+# Runtime data that should not be committed (real client data / leads).
+# Schema, index template and the demo client ARE committed (see negations).
+data/clients/*.json
+!data/clients/_schema.json
+!data/clients/index.json
+!data/clients/demo-client.json
+data/leads/*/

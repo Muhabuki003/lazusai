@@ -1,0 +1,59 @@
+{
+  "name": "LazusAI — WF3 Daily Morning Summary",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [ { "field": "cronExpression", "expression": "0 8 * * *" } ] }
+      },
+      "id": "wf3-cron",
+      "name": "8AM Daily",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.CORE_API_URL }}/clients",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [ { "name": "X-LazusAI-Key", "value": "={{ $env.LAZUSAI_CORE_KEY }}" } ] },
+        "options": {}
+      },
+      "id": "wf3-list",
+      "name": "List Clients",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "clients",
+        "options": {}
+      },
+      "id": "wf3-split",
+      "name": "Per Client",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// For each active client: generate the morning summary via the core API\n// (which uses NIM/DeepSeek) and Telegram it to the owner.\nconst http = this.helpers.httpRequest;\nconst env = (k, d='') => ($env[k] ?? d);\nconst CORE = env('CORE_API_URL', 'http://127.0.0.1:8003').replace(/\\/$/, '');\nconst TG_TOKEN = env('TELEGRAM_BOT_TOKEN', '');\nconst KEY = env('LAZUSAI_CORE_KEY', '');\nconst hdr = { 'X-LazusAI-Key': KEY, 'Content-Type': 'application/json' };\n\nconst out = [];\nfor (const item of $input.all()) {\n  const c = item.json;\n  if (c.active === false) continue;\n  const clientId = c.client_id;\n  const cfg = await http({ method: 'GET', url: `${CORE}/clients/${clientId}/config`, headers: hdr, json: true });\n  const sum = await http({ method: 'POST', url: `${CORE}/clients/${clientId}/summary`, headers: hdr, body: {}, json: true });\n  const chatId = (cfg.owner_telegram || '').replace(/^@/, '');\n  const msg = `☀️ *${cfg.business_name}* — Daily Summary\\n\\n` +\n    `💬 Conversations: ${sum.total_conversations}\\n` +\n    `🎯 Leads: ${sum.leads}\\n\\n${sum.summary}`;\n  if (TG_TOKEN && chatId) {\n    await http({ method: 'POST', url: `https://api.telegram.org/bot${TG_TOKEN}/sendMessage`,\n      body: { chat_id: chatId, text: msg, parse_mode: 'Markdown' }, json: true });\n  }\n  out.push({ json: { client_id: clientId, sent: !!(TG_TOKEN && chatId), summary: sum.summary } });\n}\nreturn out;"
+      },
+      "id": "wf3-summary",
+      "name": "Summarize & Send",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 300]
+    }
+  ],
+  "connections": {
+    "8AM Daily": { "main": [[{ "node": "List Clients", "type": "main", "index": 0 }]] },
+    "List Clients": { "main": [[{ "node": "Per Client", "type": "main", "index": 0 }]] },
+    "Per Client": { "main": [[{ "node": "Summarize & Send", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [{ "name": "lazusai" }]
+}

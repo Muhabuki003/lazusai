@@ -1,0 +1,16 @@
+{
+  "name": "lazusai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-tenant iMessage AI chatbot platform — Cloudflare Worker webhook receiver and admin router.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-worker.mjs",
+    "dev": "wrangler dev",
+    "deploy": "node scripts/build-worker.mjs && wrangler deploy",
+    "sync-clients": "bash scripts/sync_clients_to_kv.sh"
+  },
+  "devDependencies": {
+    "wrangler": "^3.78.0"
+  }
+}

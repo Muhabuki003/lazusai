@@ -1,0 +1,81 @@
+{
+  "name": "LazusAI — WF1 Inbound Message Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lazusai-inbound/:client_id",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf1-webhook",
+      "name": "Inbound Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "lazusai-inbound"
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// LazusAI inbound handler — one parameterized instance for every client.\n// Pipeline: voice transcription -> load config -> RAG context -> build prompt\n// -> NIM (DeepSeek->Kimi->GLM->Mistral) -> escalation check -> reply via\n// BlueBubbles -> log turn. All endpoints are local (no external AI APIs).\n\nconst http = this.helpers.httpRequest;\nconst env = (k, d='') => ($env[k] ?? d);\nconst CORE = env('CORE_API_URL', 'http://127.0.0.1:8003').replace(/\\/$/, '');\nconst NIM = env('NIM_BASE_URL', 'http://127.0.0.1:8000').replace(/\\/$/, '');\nconst WHISPER = env('WHISPER_URL', 'http://127.0.0.1:8002').replace(/\\/$/, '');\nconst BB = env('BLUEBUBBLES_URL', '').replace(/\\/$/, '');\nconst BB_PW = env('BLUEBUBBLES_PASSWORD', '');\nconst KEY = env('LAZUSAI_CORE_KEY', '');\nconst hdr = { 'X-LazusAI-Key': KEY, 'Content-Type': 'application/json' };\n\nconst inItem = $input.first().json;\nconst clientId = (inItem.params && inItem.params.client_id) || inItem.client_id;\nconst body = inItem.body || inItem;\nlet messageText = body.message || '';\nconst sender = body.sender || '';\nconst chatGuid = body.chat_guid || '';\n\n// 1. Voice note -> Whisper transcription.\nif (body.voice_note) {\n  const audio = (body.attachments || []).find(a => a.is_audio) || {};\n  let url = audio.url || '';\n  if (url.startsWith('/') && BB) url = BB + url;\n  const tr = await http({ method: 'POST', url: WHISPER + '/transcribe',\n    headers: hdr, body: { url, filename: audio.name || 'audio.m4a' }, json: true });\n  messageText = (tr && tr.text) || messageText;\n}\n\n// 2. Load client config.\nconst cfg = await http({ method: 'GET', url: `${CORE}/clients/${clientId}/config`, headers: hdr, json: true });\nif (cfg.active === false) {\n  return [{ json: { skipped: true, reason: 'inactive', client_id: clientId } }];\n}\n\n// 3. RAG: relevant business context + last 10 turns.\nconst feed = await http({ method: 'GET', url: `${CORE}/clients/${clientId}/feed?limit=10`, headers: hdr, json: true });\nconst recent = (feed.turns || []).map(t => ({ role: t.role === 'assistant' ? 'assistant' : 'user', content: t.text }));\n\n// Build a compact business-context block from config (services/pricing/hours/faqs).\n// (ChromaDB also stores these as embeddings; the config-derived block keeps the\n// prompt deterministic and SMS-fast.)\nconst ctxLines = [];\nif (cfg.services && cfg.services.length) ctxLines.push('Services: ' + cfg.services.join(', '));\nif (cfg.pricing) ctxLines.push('Pricing: ' + Object.entries(cfg.pricing).map(([k,v])=>`${k}: ${v}`).join('; '));\nif (cfg.hours) ctxLines.push('Hours: ' + Object.entries(cfg.hours).map(([k,v])=>`${k} ${v}`).join('; '));\nif (cfg.faqs) cfg.faqs.forEach(f => ctxLines.push(`FAQ — ${f.q} ${f.a}`));\nconst contextBlock = ctxLines.join('\\n');\n\n// 4. Build prompt: persona + business context as system, history, user msg.\nconst systemPrompt = `You are the iMessage assistant for ${cfg.business_name} (${cfg.industry}).\\nPersonality & rules: ${cfg.ai_personality}\\n\\nBusiness context:\\n${contextBlock}\\n\\nAnswer as the business. Be concise (SMS-length). If you cannot help, offer to have the owner follow up and capture the customer's name and contact details.`;\nconst messages = [{ role: 'system', content: systemPrompt }, ...recent, { role: 'user', content: messageText }];\n\n// 5. NIM with fallback chain.\nconst chain = [\n  env('NIM_MODEL_DEEPSEEK', 'deepseek-ai/deepseek-r1'),\n  env('NIM_MODEL_KIMI', 'moonshotai/kimi-k2'),\n  env('NIM_MODEL_GLM', 'zhipuai/glm-5.2'),\n  env('NIM_MODEL_MISTRAL', 'mistralai/mistral-large')\n];\nlet reply = '', usedModel = '';\nfor (const model of chain) {\n  try {\n    const r = await http({ method: 'POST', url: `${NIM}/v1/chat/completions`, headers: hdr,\n      body: { model, messages, temperature: 0.4, max_tokens: 500 }, json: true });\n    reply = (((r.choices||[])[0]||{}).message||{}).content || '';\n    reply = reply.trim();\n    if (reply) { usedModel = model; break; }\n  } catch (e) { /* try next model */ }\n}\nif (!reply) reply = 'Thanks for your message! Someone from our team will get back to you shortly.';\n\n// 6. Escalation keyword check.\nconst kws = (cfg.escalation_keywords || []).map(k => k.toLowerCase());\nconst hay = messageText.toLowerCase();\nconst escalated = kws.some(k => hay.includes(k));\n\n// 7. Reply via BlueBubbles REST -> delivers over iMessage.\nif (BB && chatGuid) {\n  await http({ method: 'POST', url: `${BB}/api/v1/message/text`,\n    qs: { password: BB_PW },\n    body: { chatGuid, tempGuid: 'lazusai-' + Date.now(), message: reply, method: 'private-api' },\n    json: true });\n}\n\n// 8. Log both turns to ChromaDB (via core API).\nawait http({ method: 'POST', url: `${CORE}/clients/${clientId}/turns`, headers: hdr,\n  body: { role: 'user', text: messageText, sender }, json: true });\nawait http({ method: 'POST', url: `${CORE}/clients/${clientId}/turns`, headers: hdr,\n  body: { role: 'assistant', text: reply, sender }, json: true });\n\nreturn [{ json: { client_id: clientId, sender, message: messageText, reply,\n  model: usedModel, escalated, voice_note: !!body.voice_note } }];"
+      },
+      "id": "wf1-orchestrator",
+      "name": "Inbound Orchestrator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            { "leftValue": "={{ $json.escalated }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf1-if-escalate",
+      "name": "Escalated?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_BASE_URL }}/webhook/lazusai-owner-alert/{{ $json.client_id }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [ { "name": "X-LazusAI-Key", "value": "={{ $env.LAZUSAI_CORE_KEY }}" } ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "wf1-trigger-alert",
+      "name": "Trigger Owner Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 200]
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify({ ok: true, escalated: $json.escalated }) }}", "options": {} },
+      "id": "wf1-respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1060, 400]
+    }
+  ],
+  "connections": {
+    "Inbound Webhook": { "main": [[{ "node": "Inbound Orchestrator", "type": "main", "index": 0 }]] },
+    "Inbound Orchestrator": { "main": [[{ "node": "Escalated?", "type": "main", "index": 0 }]] },
+    "Escalated?": { "main": [[{ "node": "Trigger Owner Alert", "type": "main", "index": 0 }], [{ "node": "Respond", "type": "main", "index": 0 }]] },
+    "Trigger Owner Alert": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [{ "name": "lazusai" }]
+}

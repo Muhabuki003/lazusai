@@ -1,0 +1,20 @@
+[Unit]
+Description=LazusAI Core API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/lazusai/core
+EnvironmentFile=-/etc/lazusai/core.env
+# Required env (set in /etc/lazusai/core.env):
+#   LAZUSAI_CORE_KEY=...        shared secret (matches Worker N8N/CORE key)
+#   LAZUSAI_DATA_DIR=/opt/lazusai/data
+#   CHROMA_HOST=127.0.0.1
+#   CHROMA_PORT=8001
+#   NIM_BASE_URL=http://127.0.0.1:8000
+ExecStart=/opt/lazusai/core/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8003
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

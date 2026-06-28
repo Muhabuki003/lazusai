@@ -1,0 +1,10 @@
+{
+  "_comment": "Routing index: maps inbound identifiers (apple_id_number, chat guid, sender phone) to a client_id. The Worker reads this from KV (key route:<identifier>). scripts/sync_clients_to_kv.sh regenerates KV from data/clients/*.json. This file is a committed snapshot for reference/version control.",
+  "routes": {
+    "+15555550100": "demo-client",
+    "iMessage;-;+15555550100": "demo-client"
+  },
+  "clients": [
+    "demo-client"
+  ]
+}

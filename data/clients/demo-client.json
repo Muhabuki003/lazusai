@@ -1,0 +1,53 @@
+{
+  "client_id": "demo-client",
+  "business_name": "Demo Plumbing & Heating",
+  "industry": "Home services — plumbing",
+  "apple_id_number": "+15555550100",
+  "bluebubbles_chat_guid": "iMessage;-;+15555550100",
+  "owner_telegram": "@demo_owner",
+  "hours": {
+    "mon": "08:00-17:00",
+    "tue": "08:00-17:00",
+    "wed": "08:00-17:00",
+    "thu": "08:00-17:00",
+    "fri": "08:00-17:00",
+    "sat": "09:00-13:00",
+    "sun": "closed"
+  },
+  "services": [
+    "Drain cleaning",
+    "Leak detection & repair",
+    "Water heater install",
+    "Boiler service",
+    "Emergency callouts (24/7)"
+  ],
+  "pricing": {
+    "callout": "$89",
+    "drain cleaning": "from $120",
+    "water heater install": "from $950",
+    "emergency surcharge": "+$60 after hours"
+  },
+  "faqs": [
+    { "q": "Do you offer emergency service?", "a": "Yes — 24/7 emergency callouts. After-hours visits carry a $60 surcharge." },
+    { "q": "What areas do you cover?", "a": "We cover the greater metro area within 25 miles of downtown." },
+    { "q": "How soon can someone come out?", "a": "Usually same-day for emergencies, otherwise next business day." },
+    { "q": "Do you give free quotes?", "a": "Yes, we provide free quotes for installs and non-emergency work." },
+    { "q": "What payment methods do you take?", "a": "Cash, card, and bank transfer." }
+  ],
+  "escalation_keywords": [
+    "emergency",
+    "flooding",
+    "burst",
+    "no water",
+    "gas leak",
+    "complaint",
+    "refund",
+    "manager",
+    "lawyer"
+  ],
+  "ai_personality": "Friendly, concise, and reassuring. You are the front-desk assistant for Demo Plumbing & Heating. Answer questions about services, pricing, and availability. Always try to capture the customer's name, address, and the nature of the problem so a technician can follow up. Never quote an exact final price for installs — give the 'from' range and offer a free quote. If unsure, offer to have the owner call back.",
+  "dashboard_user": "demo",
+  "active": true,
+  "created_at": "2026-06-28T00:00:00Z",
+  "updated_at": "2026-06-28T00:00:00Z"
+}
