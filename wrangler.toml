@@ -1,15 +1,6 @@
 name = "lazusai"
-main = "src/worker.js"
+pages_build_output_dir = "dist"
 compatibility_date = "2024-09-23"
-
-# Route the webhook + admin under lazusai.com. Adjust the zone/route to match
-# your Cloudflare zone. The Worker also answers on its workers.dev subdomain.
-routes = [
-  { pattern = "lazusai.com/webhook", zone_name = "lazusai.com" },
-  { pattern = "lazusai.com/admin/*", zone_name = "lazusai.com" },
-  { pattern = "lazusai.com/api/*", zone_name = "lazusai.com" },
-  { pattern = "lazusai.com/health", zone_name = "lazusai.com" },
-]
 
 # KV holds routing (route:<id> -> client_id), client config (client:<id>) and
 # dashboard credentials (auth:<id>). Create it once:
@@ -19,8 +10,8 @@ routes = [
 binding = "CLIENTS_KV"
 id = "REPLACE_WITH_KV_NAMESPACE_ID"
 
-# The admin dashboard is compiled into the Worker bundle by `npm run build`,
-# which reads admin/dashboard.html into src/admin-html.generated.js. Always run
+# The admin dashboard is compiled into the Pages bundle by `npm run build`,
+# which reads admin/dashboard.html into dist/_worker.js. Always run
 # the build before deploy (npm run deploy does both).
 
 [vars]
@@ -30,5 +21,5 @@ N8N_WEBHOOK_PATH = "/webhook/lazusai-inbound"
 # admin dashboard /api/* data endpoints.
 CORE_API_URL = "https://core.lazusai.com"
 
-# Secret — set with `npx wrangler secret put N8N_API_KEY` (do NOT commit it):
+# Secret — set with `npx wrangler pages secret put N8N_API_KEY` (do NOT commit it):
 #   N8N_API_KEY   shared secret sent to n8n as X-LazusAI-Key

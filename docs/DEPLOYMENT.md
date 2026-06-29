@@ -75,19 +75,23 @@ Activate all three workflows. They are **multi-tenant**: the same WF1 instance
 serves every client via the `:client_id` path param — you do **not** create a
 workflow per client.
 
-## 5. Cloudflare Worker
+## 5. Cloudflare Pages
 
 ```bash
 npm install
-npx wrangler kv namespace create CLIENTS_KV     # paste id into wrangler.toml
-npx wrangler secret put N8N_API_KEY             # = LAZUSAI_CORE_KEY
-npm run deploy                                   # builds dashboard + deploys
+npx wrangler kv namespace create CLIENTS_KV          # paste id into wrangler.toml
+npx wrangler pages secret put N8N_API_KEY            # = LAZUSAI_CORE_KEY
+npm run deploy                                        # builds dist/_worker.js + deploys
 ```
 
-Confirm routes in `wrangler.toml` match your zone, then:
+On first deploy wrangler will prompt you to create/select the Pages project named
+`lazusai`. It will then be live at `https://lazusai.pages.dev`.
+
+To also serve traffic from `lazusai.com`, add a custom domain in the Cloudflare
+Pages dashboard (Settings → Custom domains → Add a custom domain).
 
 ```bash
-curl https://lazusai.com/health
+curl https://lazusai.pages.dev/health
 ```
 
 ### BlueBubbles webhook
