@@ -1,0 +1,54 @@
+{
+  "name": "LazusAI — WF4 Appointment Reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [ { "field": "cronExpression", "expression": "0 18 * * *" } ] }
+      },
+      "id": "reminder-cron",
+      "name": "6PM Daily",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [ 260, 300 ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.CORE_API_URL || 'http://127.0.0.1:8003' }}/clients",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [ { "name": "X-LazusAI-Key", "value": "={{ $env.LAZUSAI_CORE_KEY }}" } ] }
+      },
+      "id": "reminder-list",
+      "name": "List Clients",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 480, 300 ]
+    },
+    {
+      "parameters": { "fieldToSplitOut": "clients", "options": {} },
+      "id": "reminder-split",
+      "name": "Per Client",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [ 700, 300 ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// For each active, booking-enabled client: text tomorrow's customers an\n// iMessage reminder via BlueBubbles, and Telegram the owner a heads-up count.\n// All local — no external services.\nconst http = this.helpers.httpRequest;\nconst env = (k, d='') => ($env[k] ?? d);\nconst CORE = env('CORE_API_URL', 'http://127.0.0.1:8003').replace(/\\/$/, '');\nconst BB = env('BLUEBUBBLES_URL', '').replace(/\\/$/, '');\nconst BB_PW = env('BLUEBUBBLES_PASSWORD', '');\nconst TG_TOKEN = env('TELEGRAM_BOT_TOKEN', '');\nconst KEY = env('LAZUSAI_CORE_KEY', '');\nconst hdr = { 'X-LazusAI-Key': KEY, 'Content-Type': 'application/json' };\n\nconst tzMin = parseInt(env('TZ_OFFSET_MIN', '0'), 10) || 0;\nconst tomorrow = new Date(Date.now() + tzMin * 60000 + 86400000).toISOString().slice(0, 10);\n\nfunction fmtTime(hhmm){ const [h,m]=hhmm.split(':').map(Number); const ap=h<12?'AM':'PM'; return `${(h%12)||12}:${String(m).padStart(2,'0')} ${ap}`; }\n\nconst out = [];\nfor (const item of $input.all()) {\n  const c = item.json;\n  if (c.active === false) continue;\n  const clientId = c.client_id;\n  let cfg;\n  try { cfg = await http({ method: 'GET', url: `${CORE}/clients/${clientId}/config`, headers: hdr, json: true }); } catch (e) { continue; }\n  if (!cfg.booking_enabled) continue;\n\n  let res;\n  try { res = await http({ method: 'GET', url: `${CORE}/clients/${clientId}/bookings?date=${tomorrow}`, headers: hdr, json: true }); } catch (e) { continue; }\n  const due = (res.bookings || []).filter(b => ['pending','confirmed'].includes(b.status) && !b.reminded_at);\n  let sent = 0;\n  for (const b of due) {\n    if (!b.customer_phone || !BB) continue;\n    const chatGuid = b.customer_phone.startsWith('iMessage;') ? b.customer_phone : `iMessage;-;${b.customer_phone}`;\n    const msg = `Reminder from ${cfg.business_name}: you're booked for ${b.service} tomorrow at ${fmtTime(b.start)}${b.staff ? ` with ${b.staff}` : ''}. Reply here to change it.`;\n    try {\n      await http({ method: 'POST', url: `${BB}/api/v1/message/text`, qs: { password: BB_PW },\n        body: { chatGuid, tempGuid: 'lazusai-rem-' + Date.now() + '-' + sent, message: msg, method: 'private-api' }, json: true });\n      // Mark so we never double-remind.\n      await http({ method: 'PATCH', url: `${CORE}/clients/${clientId}/bookings/${b.id}`, headers: hdr, body: { reminded_at: new Date().toISOString() }, json: true }).catch(() => {});\n      sent++;\n    } catch (e) { /* skip this one */ }\n  }\n\n  const chatId = (cfg.owner_telegram || '').replace(/^@/, '');\n  if (TG_TOKEN && chatId && due.length) {\n    await http({ method: 'POST', url: `https://api.telegram.org/bot${TG_TOKEN}/sendMessage`,\n      body: { chat_id: chatId, text: `📅 ${cfg.business_name}: ${due.length} appointment(s) tomorrow. Reminders sent to ${sent} customer(s).` }, json: true }).catch(() => {});\n  }\n  out.push({ json: { client_id: clientId, tomorrow, due: due.length, reminders_sent: sent } });\n}\nreturn out.length ? out : [{ json: { ran: true, reminders_sent: 0 } }];"
+      },
+      "id": "reminder-send",
+      "name": "Send Reminders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 920, 300 ]
+    }
+  ],
+  "connections": {
+    "6PM Daily": { "main": [ [ { "node": "List Clients", "type": "main", "index": 0 } ] ] },
+    "List Clients": { "main": [ [ { "node": "Per Client", "type": "main", "index": 0 } ] ] },
+    "Per Client": { "main": [ [ { "node": "Send Reminders", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [ { "name": "lazusai" } ]
+}

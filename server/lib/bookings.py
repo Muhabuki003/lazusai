@@ -325,7 +325,7 @@ def update(client_id: str, booking_id: str, patch: dict) -> dict | None:
         "service", "service_price", "service_duration_min", "staff", "date",
         "start", "end", "customer_name", "customer_phone", "customer_email",
         "address", "notes", "status", "payment_status", "amount_due",
-        "deposit_amount", "payment_link",
+        "deposit_amount", "payment_link", "reminded_at",
     }
     for r in rows:
         if r.get("id") == booking_id:

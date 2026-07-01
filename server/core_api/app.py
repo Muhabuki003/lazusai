@@ -103,6 +103,7 @@ class BookingPatch(BaseModel):
     notes: str | None = None
     status: str | None = None
     payment_status: str | None = None
+    reminded_at: str | None = None
 
 
 class Lead(BaseModel):
