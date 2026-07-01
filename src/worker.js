@@ -239,10 +239,12 @@ async function handleAdmin(request, env, url) {
 }
 
 async function handleApiProxy(request, env, url) {
-  // /api/:client_id/:action  -> proxied to n8n data endpoints.
-  const parts = url.pathname.split("/").filter(Boolean); // ["api", id, action]
+  // /api/:client_id/<rest...>  -> proxied to the Core API. `rest` can be a
+  // multi-segment path (e.g. bookings/<id>/cancel), so forward everything
+  // after the client id, not just the first segment.
+  const parts = url.pathname.split("/").filter(Boolean); // ["api", id, ...rest]
   const clientId = parts[1];
-  const action = parts[2] || "";
+  const rest = parts.slice(2).map(encodeURIComponent).join("/");
   if (!clientId) return json({ error: "missing_client_id" }, 400);
 
   const authError = await requireBasicAuth(request, env, clientId);
@@ -250,9 +252,9 @@ async function handleApiProxy(request, env, url) {
 
   // Dashboard data is served by the LazusAI Core API on the VPS (reached via
   // the Cloudflare Tunnel). Actions: feed, leads, config (GET/POST), reindex,
-  // toggle.
+  // toggle, availability, bookings (+ nested /:id, /:id/cancel), identify.
   const base = trimSlash(env.CORE_API_URL || env.N8N_BASE_URL);
-  const target = `${base}/clients/${encodeURIComponent(clientId)}/${action}${url.search}`;
+  const target = `${base}/clients/${encodeURIComponent(clientId)}/${rest}${url.search}`;
   const proxied = await fetch(target, {
     method: request.method,
     headers: {
