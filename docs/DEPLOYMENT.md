@@ -45,12 +45,14 @@ Worker reaches it via `CORE_API_URL`.
 
 ## 4. n8n workflows
 
-Import the three files in `n8n/` into `n8n.bookistudios.com`
+Import the files in `n8n/` into `n8n.bookistudios.com`
 (Workflows → Import from File):
 
 - `workflow-1-inbound-handler.json` — webhook `…/webhook/lazusai-inbound/:client_id`
 - `workflow-2-owner-alert.json` — webhook `…/webhook/lazusai-owner-alert/:client_id`
 - `workflow-3-daily-summary.json` — cron 08:00 daily
+- `workflow-4-appointment-reminders.json` — cron 18:00 daily (only acts on
+  booking-enabled clients; texts next-day customers a reminder)
 
 Set these n8n **environment variables** (Settings → Variables, or the n8n
 process env) so the Code nodes can reach the stack:
@@ -64,9 +66,19 @@ BLUEBUBBLES_PASSWORD=<bluebubbles password>
 TELEGRAM_BOT_TOKEN=<owner alert bot token>
 LAZUSAI_CORE_KEY=<shared secret>
 N8N_BASE_URL=https://n8n.bookistudios.com
+# Optional: business-local timezone offset in minutes (used for booking dates
+# and reminders), e.g. -300 for US Eastern. Defaults to UTC.
+TZ_OFFSET_MIN=0
 # Optional model id overrides to match deployed NIM containers:
 # NIM_MODEL_DEEPSEEK, NIM_MODEL_KIMI, NIM_MODEL_GLM, NIM_MODEL_MISTRAL
 ```
+
+The Core API also sends staff/owner booking alerts, so set the same
+`TELEGRAM_BOT_TOKEN`, `BLUEBUBBLES_URL`, and `BLUEBUBBLES_PASSWORD` in
+`/etc/lazusai/core.env`. Per-client Square/Stripe payment credentials are
+**not** environment variables — they're stored per client (dashboard →
+Settings → Payments, or during onboarding) so each business uses its own
+Square account.
 
 > `n8n-nodes-base.code` runs Node.js with `this.helpers.httpRequest`; no extra
 > packages or `NODE_FUNCTION_ALLOW_*` flags are required.
@@ -143,6 +155,19 @@ Dashboard: `https://lazusai.com/admin/<client_id>` (HTTP Basic auth — the
    escalation check → BlueBubbles reply → log turn → (if escalated) WF2
 4. WF2: detect lead/escalation → log lead → Telegram the owner
 5. WF3: 08:00 daily → Core summary (NIM) → Telegram the owner
+6. WF4: 18:00 daily → next-day bookings → iMessage reminders + owner heads-up
+
+### Bookings & payments (booking-enabled clients)
+
+- WF1 recognizes staff numbers (Core `/identify`) and gives them a
+  schedule-aware persona; customers get the sales/booking persona.
+- When a customer confirms a service + time, the model emits a booking
+  directive; WF1 calls Core `/bookings`, which checks the slot, saves it,
+  mints a **Square/Stripe deposit or full-payment link** (per the client's
+  own credentials), and alerts the assigned staff (iMessage) + owner
+  (Telegram) — e.g. "Josh — Jacob booked a Haircut Thu Jul 2 at 5:00 PM."
+- The owner manages everything from the dashboard **Calendar / Bookings /
+  Team / Services / Settings** tabs.
 
 ## Security notes
 

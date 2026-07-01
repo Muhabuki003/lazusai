@@ -1,5 +1,5 @@
 {
-  "name": "LazusAI — WF1 Inbound Message Handler",
+  "name": "LazusAI \u2014 WF1 Inbound Message Handler",
   "nodes": [
     {
       "parameters": {
@@ -12,26 +12,44 @@
       "name": "Inbound Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "webhookId": "lazusai-inbound"
     },
     {
       "parameters": {
         "language": "javaScript",
-        "jsCode": "// LazusAI inbound handler — one parameterized instance for every client.\n// Pipeline: voice transcription -> load config -> RAG context -> build prompt\n// -> NIM (DeepSeek->Kimi->GLM->Mistral) -> escalation check -> reply via\n// BlueBubbles -> log turn. All endpoints are local (no external AI APIs).\n\nconst http = this.helpers.httpRequest;\nconst env = (k, d='') => ($env[k] ?? d);\nconst CORE = env('CORE_API_URL', 'http://127.0.0.1:8003').replace(/\\/$/, '');\nconst NIM = env('NIM_BASE_URL', 'http://127.0.0.1:8000').replace(/\\/$/, '');\nconst WHISPER = env('WHISPER_URL', 'http://127.0.0.1:8002').replace(/\\/$/, '');\nconst BB = env('BLUEBUBBLES_URL', '').replace(/\\/$/, '');\nconst BB_PW = env('BLUEBUBBLES_PASSWORD', '');\nconst KEY = env('LAZUSAI_CORE_KEY', '');\nconst hdr = { 'X-LazusAI-Key': KEY, 'Content-Type': 'application/json' };\n\nconst inItem = $input.first().json;\nconst clientId = (inItem.params && inItem.params.client_id) || inItem.client_id;\nconst body = inItem.body || inItem;\nlet messageText = body.message || '';\nconst sender = body.sender || '';\nconst chatGuid = body.chat_guid || '';\n\n// 1. Voice note -> Whisper transcription.\nif (body.voice_note) {\n  const audio = (body.attachments || []).find(a => a.is_audio) || {};\n  let url = audio.url || '';\n  if (url.startsWith('/') && BB) url = BB + url;\n  const tr = await http({ method: 'POST', url: WHISPER + '/transcribe',\n    headers: hdr, body: { url, filename: audio.name || 'audio.m4a' }, json: true });\n  messageText = (tr && tr.text) || messageText;\n}\n\n// 2. Load client config.\nconst cfg = await http({ method: 'GET', url: `${CORE}/clients/${clientId}/config`, headers: hdr, json: true });\nif (cfg.active === false) {\n  return [{ json: { skipped: true, reason: 'inactive', client_id: clientId } }];\n}\n\n// 3. RAG: relevant business context + last 10 turns.\nconst feed = await http({ method: 'GET', url: `${CORE}/clients/${clientId}/feed?limit=10`, headers: hdr, json: true });\nconst recent = (feed.turns || []).map(t => ({ role: t.role === 'assistant' ? 'assistant' : 'user', content: t.text }));\n\n// Build a compact business-context block from config (services/pricing/hours/faqs).\n// (ChromaDB also stores these as embeddings; the config-derived block keeps the\n// prompt deterministic and SMS-fast.)\nconst ctxLines = [];\nif (cfg.services && cfg.services.length) ctxLines.push('Services: ' + cfg.services.join(', '));\nif (cfg.pricing) ctxLines.push('Pricing: ' + Object.entries(cfg.pricing).map(([k,v])=>`${k}: ${v}`).join('; '));\nif (cfg.hours) ctxLines.push('Hours: ' + Object.entries(cfg.hours).map(([k,v])=>`${k} ${v}`).join('; '));\nif (cfg.faqs) cfg.faqs.forEach(f => ctxLines.push(`FAQ — ${f.q} ${f.a}`));\nconst contextBlock = ctxLines.join('\\n');\n\n// 4. Build prompt: persona + business context as system, history, user msg.\nconst systemPrompt = `You are the iMessage assistant for ${cfg.business_name} (${cfg.industry}).\\nPersonality & rules: ${cfg.ai_personality}\\n\\nBusiness context:\\n${contextBlock}\\n\\nAnswer as the business. Be concise (SMS-length). If you cannot help, offer to have the owner follow up and capture the customer's name and contact details.`;\nconst messages = [{ role: 'system', content: systemPrompt }, ...recent, { role: 'user', content: messageText }];\n\n// 5. NIM with fallback chain.\nconst chain = [\n  env('NIM_MODEL_DEEPSEEK', 'deepseek-ai/deepseek-r1'),\n  env('NIM_MODEL_KIMI', 'moonshotai/kimi-k2'),\n  env('NIM_MODEL_GLM', 'zhipuai/glm-5.2'),\n  env('NIM_MODEL_MISTRAL', 'mistralai/mistral-large')\n];\nlet reply = '', usedModel = '';\nfor (const model of chain) {\n  try {\n    const r = await http({ method: 'POST', url: `${NIM}/v1/chat/completions`, headers: hdr,\n      body: { model, messages, temperature: 0.4, max_tokens: 500 }, json: true });\n    reply = (((r.choices||[])[0]||{}).message||{}).content || '';\n    reply = reply.trim();\n    if (reply) { usedModel = model; break; }\n  } catch (e) { /* try next model */ }\n}\nif (!reply) reply = 'Thanks for your message! Someone from our team will get back to you shortly.';\n\n// 6. Escalation keyword check.\nconst kws = (cfg.escalation_keywords || []).map(k => k.toLowerCase());\nconst hay = messageText.toLowerCase();\nconst escalated = kws.some(k => hay.includes(k));\n\n// 7. Reply via BlueBubbles REST -> delivers over iMessage.\nif (BB && chatGuid) {\n  await http({ method: 'POST', url: `${BB}/api/v1/message/text`,\n    qs: { password: BB_PW },\n    body: { chatGuid, tempGuid: 'lazusai-' + Date.now(), message: reply, method: 'private-api' },\n    json: true });\n}\n\n// 8. Log both turns to ChromaDB (via core API).\nawait http({ method: 'POST', url: `${CORE}/clients/${clientId}/turns`, headers: hdr,\n  body: { role: 'user', text: messageText, sender }, json: true });\nawait http({ method: 'POST', url: `${CORE}/clients/${clientId}/turns`, headers: hdr,\n  body: { role: 'assistant', text: reply, sender }, json: true });\n\nreturn [{ json: { client_id: clientId, sender, message: messageText, reply,\n  model: usedModel, escalated, voice_note: !!body.voice_note } }];"
+        "jsCode": "// LazusAI inbound handler \u2014 one parameterized instance for every client.\n// Pipeline: voice transcription -> identify sender (staff vs customer) ->\n// load config -> RAG context -> build prompt -> NIM (DeepSeek->Kimi->GLM->\n// Mistral) -> booking tool-loop (availability / create booking via Core API)\n// -> escalation check -> reply via BlueBubbles -> log turn.\n// All AI endpoints are local (no external AI APIs).\n\nconst http = this.helpers.httpRequest;\nconst env = (k, d='') => ($env[k] ?? d);\nconst CORE = env('CORE_API_URL', 'http://127.0.0.1:8003').replace(/\\/$/, '');\nconst NIM = env('NIM_BASE_URL', 'http://127.0.0.1:8000').replace(/\\/$/, '');\nconst WHISPER = env('WHISPER_URL', 'http://127.0.0.1:8002').replace(/\\/$/, '');\nconst BB = env('BLUEBUBBLES_URL', '').replace(/\\/$/, '');\nconst BB_PW = env('BLUEBUBBLES_PASSWORD', '');\nconst KEY = env('LAZUSAI_CORE_KEY', '');\nconst hdr = { 'X-LazusAI-Key': KEY, 'Content-Type': 'application/json' };\n\nconst inItem = $input.first().json;\nconst clientId = (inItem.params && inItem.params.client_id) || inItem.client_id;\nconst body = inItem.body || inItem;\nlet messageText = body.message || '';\nconst sender = body.sender || '';\nconst chatGuid = body.chat_guid || '';\n\n// Business-local \"today\" for booking date math (override with TZ_OFFSET_MIN).\nconst tzMin = parseInt(env('TZ_OFFSET_MIN', '0'), 10) || 0;\nconst nowLocal = new Date(Date.now() + tzMin * 60000);\nconst todayISO = nowLocal.toISOString().slice(0, 10);\n\n// 1. Voice note -> Whisper transcription.\nif (body.voice_note) {\n  const audio = (body.attachments || []).find(a => a.is_audio) || {};\n  let url = audio.url || '';\n  if (url.startsWith('/') && BB) url = BB + url;\n  const tr = await http({ method: 'POST', url: WHISPER + '/transcribe',\n    headers: hdr, body: { url, filename: audio.name || 'audio.m4a' }, json: true });\n  messageText = (tr && tr.text) || messageText;\n}\n\n// 2. Load client config.\nconst cfg = await http({ method: 'GET', url: `${CORE}/clients/${clientId}/config`, headers: hdr, json: true });\nif (cfg.active === false) {\n  return [{ json: { skipped: true, reason: 'inactive', client_id: clientId } }];\n}\n\n// 2b. Identify the sender \u2014 staff numbers get a different persona.\nlet who = { role: 'customer' };\ntry {\n  who = await http({ method: 'GET', url: `${CORE}/clients/${clientId}/identify?phone=${encodeURIComponent(sender)}`, headers: hdr, json: true });\n} catch (e) { /* default to customer */ }\nconst isStaff = who.role === 'staff';\n\n// 3. RAG: last 10 turns for continuity.\nconst feed = await http({ method: 'GET', url: `${CORE}/clients/${clientId}/feed?limit=10`, headers: hdr, json: true });\nconst recent = (feed.turns || []).map(t => ({ role: t.role === 'assistant' ? 'assistant' : 'user', content: t.text }));\n\n// Build a compact business-context block from config.\nconst ctxLines = [];\nif (cfg.services && cfg.services.length) ctxLines.push('Services: ' + cfg.services.join(', '));\nif (cfg.pricing) ctxLines.push('Pricing: ' + Object.entries(cfg.pricing).map(([k,v])=>`${k}: ${v}`).join('; '));\nif (cfg.hours) ctxLines.push('Hours: ' + Object.entries(cfg.hours).map(([k,v])=>`${k} ${v}`).join('; '));\nif (cfg.faqs) cfg.faqs.forEach(f => ctxLines.push(`FAQ \u2014 ${f.q} ${f.a}`));\nconst contextBlock = ctxLines.join('\\n');\n\n// 3b. Booking context + protocol (only when the client enabled booking).\nconst bookingOn = !!cfg.booking_enabled;\nlet bookingBlock = '';\nif (bookingOn) {\n  const matrix = (cfg.services_matrix || []).map(s => {\n    const bits = [s.name];\n    if (s.price != null) bits.push(`$${s.price}`);\n    if (s.duration_min) bits.push(`${s.duration_min}min`);\n    if (s.staff && s.staff.length) bits.push('by ' + s.staff.join('/'));\n    return '\u2022 ' + bits.join(' \u2014 ');\n  }).join('\\n');\n  const team = (cfg.staff || []).map(s => s.name + (s.role ? ` (${s.role})` : '')).join(', ');\n  const pay = ((cfg.integrations || {}).payment) || {};\n  let payNote = '';\n  if (pay.model === 'deposit') payNote = `A deposit of $${pay.deposit_amount || 0} is required; a payment link will be sent automatically after booking.`;\n  else if (pay.model === 'full') payNote = 'Full payment is collected via a link sent automatically after booking.';\n\n  bookingBlock = [\n    `\\nBOOKING IS ENABLED. Today is ${todayISO}.`,\n    matrix ? `Bookable services:\\n${matrix}` : '',\n    team ? `Team: ${team}` : '',\n    payNote,\n    `\\nTo help a customer book, gather: service, preferred day (resolve to a YYYY-MM-DD date), optional staff, their name, and phone.`,\n    `When you need to see open times, end your reply with EXACTLY one line:`,\n    `[[AVAIL service=\"<name>\" date=\"<YYYY-MM-DD>\" staff=\"<name or empty>\"]]`,\n    `When the customer has confirmed a specific service, date, time, and given their name, end your reply with EXACTLY one line:`,\n    `[[BOOK service=\"<name>\" staff=\"<name or empty>\" date=\"<YYYY-MM-DD>\" start=\"<HH:MM 24h>\" name=\"<customer name>\" phone=\"${sender}\" notes=\"<optional>\"]]`,\n    `Never invent open times \u2014 only offer times returned by an AVAIL result. Do not show the [[...]] line's raw text as the whole message; put your normal reply first, then the directive on its own final line.`,\n  ].filter(Boolean).join('\\n');\n}\n\n// 4. System prompt (customer vs staff persona).\nlet systemPrompt;\nif (isStaff) {\n  const mine = bookingOn ? await http({ method: 'GET',\n    url: `${CORE}/clients/${clientId}/bookings?date=${todayISO}${who.name ? `&staff=${encodeURIComponent(who.name)}` : ''}`,\n    headers: hdr, json: true }).catch(() => ({ bookings: [] })) : { bookings: [] };\n  const list = (mine.bookings || []).map(b => `${b.start} ${b.service} \u2014 ${b.customer_name || b.customer_phone || ''} (${b.status})`).join('\\n') || 'nothing booked yet';\n  systemPrompt = `You are the LazusAI staff assistant for ${cfg.business_name}. You are talking to ${who.name || 'a team member'}${who.staff_role ? ` (${who.staff_role})` : ''}, a STAFF member \u2014 not a customer. Be brief and helpful.\\nToday's schedule for them (${todayISO}):\\n${list}\\n\\nYou can answer questions about their day and the business. If they ask to change a booking, tell them to use the dashboard for now.${bookingBlock}`;\n} else {\n  systemPrompt = `You are the iMessage assistant for ${cfg.business_name} (${cfg.industry}).\\nPersonality & rules: ${cfg.ai_personality}\\n\\nBusiness context:\\n${contextBlock}\\n${bookingBlock}\\n\\nAnswer as the business. Be concise (SMS-length). If you cannot help, offer to have the owner follow up and capture the customer's name and contact details.`;\n}\n\nconst chain = [\n  env('NIM_MODEL_DEEPSEEK', 'deepseek-ai/deepseek-r1'),\n  env('NIM_MODEL_KIMI', 'moonshotai/kimi-k2'),\n  env('NIM_MODEL_GLM', 'zhipuai/glm-5.2'),\n  env('NIM_MODEL_MISTRAL', 'mistralai/mistral-large')\n];\nasync function nim(messages) {\n  for (const model of chain) {\n    try {\n      const r = await http({ method: 'POST', url: `${NIM}/v1/chat/completions`, headers: hdr,\n        body: { model, messages, temperature: 0.4, max_tokens: 500 }, json: true });\n      const txt = (((r.choices||[])[0]||{}).message||{}).content || '';\n      if (txt.trim()) return { text: txt.trim(), model };\n    } catch (e) { /* try next model */ }\n  }\n  return { text: '', model: '' };\n}\n\n// Directive parsing: [[VERB key=\"value\" ...]]\nfunction parseDirective(text) {\n  const m = /\\[\\[(AVAIL|BOOK)\\b([^\\]]*)\\]\\]/i.exec(text);\n  if (!m) return null;\n  const verb = m[1].toUpperCase();\n  const args = {};\n  const re = /(\\w+)\\s*=\\s*\"([^\"]*)\"/g; let a;\n  while ((a = re.exec(m[2])) !== null) args[a[1]] = a[2];\n  return { verb, args, raw: m[0] };\n}\nconst stripDirective = t => t.replace(/\\[\\[(AVAIL|BOOK)\\b[^\\]]*\\]\\]/gi, '').trim();\n\n// 5. First model pass.\nlet messages = [{ role: 'system', content: systemPrompt }, ...recent, { role: 'user', content: messageText }];\nlet { text: reply, model: usedModel } = await nim(messages);\nlet bookingResult = null;\n\n// 6. Booking tool-loop (max 2 iterations).\nfor (let i = 0; bookingOn && i < 2; i++) {\n  const d = parseDirective(reply);\n  if (!d) break;\n  let toolMsg = '';\n  if (d.verb === 'AVAIL') {\n    const qs = `date=${encodeURIComponent(d.args.date||todayISO)}&service=${encodeURIComponent(d.args.service||'')}${d.args.staff?`&staff=${encodeURIComponent(d.args.staff)}`:''}`;\n    let av = { slots: [] };\n    try { av = await http({ method: 'GET', url: `${CORE}/clients/${clientId}/availability?${qs}`, headers: hdr, json: true }); } catch (e) {}\n    const slots = (av.slots || []).slice(0, 8).map(s => s.start + (s.staff ? ` (${s.staff})` : '')).join(', ');\n    toolMsg = slots ? `AVAIL result for ${d.args.service} on ${d.args.date}: ${slots}. Offer these to the customer.` :\n      `AVAIL result: no open slots for ${d.args.service} on ${d.args.date}. Suggest another day.`;\n  } else if (d.verb === 'BOOK') {\n    try {\n      const r = await http({ method: 'POST', url: `${CORE}/clients/${clientId}/bookings`, headers: hdr, json: true,\n        body: { service: d.args.service, staff: d.args.staff || '', date: d.args.date, start: d.args.start,\n                customer_name: d.args.name || '', customer_phone: d.args.phone || sender,\n                notes: d.args.notes || '', source: 'bot' } });\n      bookingResult = r;\n      let extra = '';\n      if (r.payment && r.payment.required && r.payment.url) {\n        const label = r.payment.model === 'deposit' ? `deposit of $${r.payment.amount}` : `payment of $${r.payment.amount}`;\n        extra = ` A ${label} holds the spot \u2014 pay here: ${r.payment.url}`;\n      }\n      toolMsg = `BOOK success: ${d.args.service} on ${d.args.date} at ${d.args.start}${d.args.staff?` with ${d.args.staff}`:''}. Confirm warmly to the customer.${extra ? ' Include this payment link verbatim in your reply:' + extra : ''}`;\n    } catch (e) {\n      const conflict = String(e && e.message || '').includes('409');\n      toolMsg = conflict ? `BOOK failed: that time was just taken. Apologize and offer to check other times.`\n                         : `BOOK failed due to a system error. Apologize and offer to have the team follow up.`;\n    }\n  }\n  // Follow-up pass with the tool result so the model writes a natural reply.\n  messages = [{ role: 'system', content: systemPrompt }, ...recent,\n              { role: 'user', content: messageText },\n              { role: 'assistant', content: reply },\n              { role: 'system', content: toolMsg }];\n  const nx = await nim(messages);\n  reply = nx.text || reply; usedModel = nx.model || usedModel;\n}\nreply = stripDirective(reply);\nif (!reply) reply = 'Thanks for your message! Someone from our team will get back to you shortly.';\n\n// 7. Escalation keyword check.\nconst kws = (cfg.escalation_keywords || []).map(k => k.toLowerCase());\nconst hay = messageText.toLowerCase();\nconst escalated = !isStaff && kws.some(k => hay.includes(k));\n\n// 8. Reply via BlueBubbles REST -> delivers over iMessage.\nif (BB && chatGuid) {\n  await http({ method: 'POST', url: `${BB}/api/v1/message/text`,\n    qs: { password: BB_PW },\n    body: { chatGuid, tempGuid: 'lazusai-' + Date.now(), message: reply, method: 'private-api' },\n    json: true });\n}\n\n// 9. Log both turns.\nawait http({ method: 'POST', url: `${CORE}/clients/${clientId}/turns`, headers: hdr,\n  body: { role: 'user', text: messageText, sender }, json: true });\nawait http({ method: 'POST', url: `${CORE}/clients/${clientId}/turns`, headers: hdr,\n  body: { role: 'assistant', text: reply, sender }, json: true });\n\nreturn [{ json: { client_id: clientId, sender, staff: isStaff, message: messageText, reply,\n  model: usedModel, escalated, booked: !!bookingResult,\n  booking_id: bookingResult && bookingResult.booking && bookingResult.booking.id,\n  voice_note: !!body.voice_note } }];\n"
       },
       "id": "wf1-orchestrator",
       "name": "Inbound Orchestrator",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [520, 300]
+      "position": [
+        520,
+        300
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
           "conditions": [
-            { "leftValue": "={{ $json.escalated }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+            {
+              "leftValue": "={{ $json.escalated }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
           ],
           "combinator": "and"
         },
@@ -41,14 +59,24 @@
       "name": "Escalated?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [800, 300]
+      "position": [
+        800,
+        300
+      ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ $env.N8N_BASE_URL }}/webhook/lazusai-owner-alert/{{ $json.client_id }}",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [ { "name": "X-LazusAI-Key", "value": "={{ $env.LAZUSAI_CORE_KEY }}" } ] },
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-LazusAI-Key",
+              "value": "={{ $env.LAZUSAI_CORE_KEY }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
@@ -58,24 +86,87 @@
       "name": "Trigger Owner Alert",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1060, 200]
+      "position": [
+        1060,
+        200
+      ]
     },
     {
-      "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify({ ok: true, escalated: $json.escalated }) }}", "options": {} },
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, escalated: $json.escalated }) }}",
+        "options": {}
+      },
       "id": "wf1-respond",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1060, 400]
+      "position": [
+        1060,
+        400
+      ]
     }
   ],
   "connections": {
-    "Inbound Webhook": { "main": [[{ "node": "Inbound Orchestrator", "type": "main", "index": 0 }]] },
-    "Inbound Orchestrator": { "main": [[{ "node": "Escalated?", "type": "main", "index": 0 }]] },
-    "Escalated?": { "main": [[{ "node": "Trigger Owner Alert", "type": "main", "index": 0 }], [{ "node": "Respond", "type": "main", "index": 0 }]] },
-    "Trigger Owner Alert": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+    "Inbound Webhook": {
+      "main": [
+        [
+          {
+            "node": "Inbound Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inbound Orchestrator": {
+      "main": [
+        [
+          {
+            "node": "Escalated?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalated?": {
+      "main": [
+        [
+          {
+            "node": "Trigger Owner Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Owner Alert": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "active": false,
-  "tags": [{ "name": "lazusai" }]
+  "tags": [
+    {
+      "name": "lazusai"
+    }
+  ]
 }

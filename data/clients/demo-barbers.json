@@ -1,0 +1,84 @@
+{
+  "client_id": "demo-barbers",
+  "business_name": "Tiger Barbers",
+  "industry": "Barbershop & grooming",
+  "apple_id_number": "+15555550110",
+  "bluebubbles_chat_guid": "iMessage;-;+15555550110",
+  "owner_telegram": "@tiger_owner",
+  "hours": {
+    "mon": "10:00-19:00",
+    "tue": "10:00-19:00",
+    "wed": "10:00-19:00",
+    "thu": "10:00-19:00",
+    "fri": "10:00-19:00",
+    "sat": "10:00-14:00",
+    "sun": "closed"
+  },
+  "services": [
+    "Haircut",
+    "Skin Fade",
+    "Beard Trim",
+    "Cut + Beard Combo"
+  ],
+  "pricing": {
+    "haircut": "$35",
+    "skin fade": "$40",
+    "beard trim": "$20",
+    "cut + beard combo": "$55"
+  },
+  "booking_enabled": true,
+  "slot_minutes": 30,
+  "services_matrix": [
+    { "name": "Haircut", "price": 35, "duration_min": 30, "staff": ["Josh", "Jacob"], "deposit": 10 },
+    { "name": "Skin Fade", "price": 40, "duration_min": 45, "staff": ["Josh"], "deposit": 10 },
+    { "name": "Beard Trim", "price": 20, "duration_min": 20, "staff": ["Josh", "Jacob"] },
+    { "name": "Cut + Beard Combo", "price": 55, "duration_min": 60, "staff": ["Josh"], "deposit": 15 }
+  ],
+  "staff": [
+    {
+      "name": "Josh",
+      "phone": "+15555550111",
+      "role": "Master Barber",
+      "services": ["Haircut", "Skin Fade", "Beard Trim", "Cut + Beard Combo"],
+      "hours": { "mon": "10:00-19:00", "tue": "10:00-19:00", "wed": "10:00-19:00", "thu": "10:00-19:00", "fri": "10:00-19:00", "sat": "10:00-14:00", "sun": "closed" },
+      "notify": true
+    },
+    {
+      "name": "Jacob",
+      "phone": "+15555550112",
+      "role": "Barber",
+      "services": ["Haircut", "Beard Trim"],
+      "hours": { "mon": "12:00-19:00", "tue": "12:00-19:00", "wed": "closed", "thu": "12:00-19:00", "fri": "12:00-19:00", "sat": "10:00-14:00", "sun": "closed" },
+      "notify": true
+    }
+  ],
+  "faqs": [
+    { "q": "Do you take walk-ins?", "a": "We do when a chair is free, but booking ahead guarantees your spot." },
+    { "q": "Where are you located?", "a": "Downtown, 200 Main St. Parking is free out back." },
+    { "q": "What payment do you take?", "a": "Card, tap-to-pay, and cash. A small deposit holds your booking." }
+  ],
+  "escalation_keywords": [
+    "complaint",
+    "refund",
+    "manager",
+    "reschedule",
+    "cancel",
+    "lawyer"
+  ],
+  "ai_personality": "Friendly, upbeat front-desk assistant for Tiger Barbers. Help customers book haircuts and grooming with a specific barber and time. Always confirm the service, barber, day, and time back to the customer before booking. When a deposit is required, send the payment link and explain the balance is due in-shop. Keep replies short and casual.",
+  "integrations": {
+    "payment": {
+      "processor": "square",
+      "model": "deposit",
+      "deposit_amount": 10,
+      "currency": "USD",
+      "square_access_token": "",
+      "square_location_id": "",
+      "square_env": "production"
+    }
+  },
+  "dashboard_user": "demo-barbers",
+  "active": true,
+  "created_at": "2026-06-28T00:00:00Z",
+  "updated_at": "2026-06-28T00:00:00Z"
+}
