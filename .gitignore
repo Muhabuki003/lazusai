@@ -20,3 +20,5 @@ data/clients/*.json
 !data/clients/index.json
 !data/clients/demo-client.json
 data/leads/*/
+!data/clients/demo-barbers.json
+data/bookings/*/

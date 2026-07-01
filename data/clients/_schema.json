@@ -69,6 +69,94 @@
       "type": "string",
       "description": "Free-form persona/tone used to build the system prompt."
     },
+    "booking_enabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Master switch: whether the bot can take appointments for this client."
+    },
+    "slot_minutes": {
+      "type": "integer",
+      "default": 30,
+      "description": "Booking grid granularity in minutes (start times are offered on this interval)."
+    },
+    "services_matrix": {
+      "type": "array",
+      "description": "Bookable services with price/duration and which staff perform them.",
+      "items": {
+        "type": "object",
+        "required": ["name", "duration_min"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "price": { "type": "number", "description": "Price in dollars." },
+          "duration_min": { "type": "integer", "description": "Appointment length in minutes." },
+          "staff": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Names of staff who perform this service. Empty = anyone."
+          },
+          "deposit": { "type": "number", "description": "Optional per-service deposit override (dollars)." }
+        }
+      }
+    },
+    "staff": {
+      "type": "array",
+      "description": "Team roster. The bot recognizes these phone numbers as staff and can send them booking alerts.",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "phone": {
+            "type": "string",
+            "description": "Staff iMessage/phone. Inbound from this number is treated as staff, not a customer."
+          },
+          "role": { "type": "string" },
+          "services": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Services this person offers. Empty = all services."
+          },
+          "hours": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Optional per-staff schedule (day -> open-close). Falls back to business hours."
+          },
+          "notify": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether this person receives booking notifications."
+          }
+        }
+      }
+    },
+    "integrations": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Third-party API config (payments, etc.). Secrets live here on the VPS, never in KV.",
+      "properties": {
+        "payment": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "processor": { "type": "string", "enum": ["none", "square", "stripe"], "default": "none" },
+            "model": {
+              "type": "string",
+              "enum": ["none", "deposit", "full"],
+              "default": "none",
+              "description": "none = pay on-site; deposit = collect a hold; full = pay in advance."
+            },
+            "deposit_amount": { "type": "number", "description": "Deposit in dollars when model = deposit." },
+            "currency": { "type": "string", "default": "USD" },
+            "square_access_token": { "type": "string" },
+            "square_location_id": { "type": "string" },
+            "square_env": { "type": "string", "enum": ["production", "sandbox"], "default": "production" },
+            "stripe_secret_key": { "type": "string" }
+          }
+        }
+      }
+    },
     "dashboard_user": {
       "type": "string",
       "description": "Admin dashboard Basic-auth username (password lives only in KV)."

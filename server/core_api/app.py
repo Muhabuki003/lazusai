@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 # Make the shared libs importable whether run from repo root or server/.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import cf_kv, chroma_store, clients, nim_client  # noqa: E402
+from lib import bookings, cf_kv, chroma_store, clients, nim_client, notify, payments  # noqa: E402
 
 CORE_KEY = os.environ.get("LAZUSAI_CORE_KEY", "")
 
@@ -46,6 +46,11 @@ class ConfigUpdate(BaseModel):
     faqs: list[dict] | None = None
     escalation_keywords: list[str] | None = None
     ai_personality: str | None = None
+    booking_enabled: bool | None = None
+    slot_minutes: int | None = None
+    services_matrix: list[dict] | None = None
+    staff: list[dict] | None = None
+    integrations: dict | None = None
 
 
 class NewClient(BaseModel):
@@ -60,6 +65,44 @@ class NewClient(BaseModel):
     faqs: list[dict] = []
     escalation_keywords: list[str] = []
     ai_personality: str = ""
+    booking_enabled: bool = False
+    slot_minutes: int = 30
+    services_matrix: list[dict] = []
+    staff: list[dict] = []
+    integrations: dict = {}
+
+
+class NewBooking(BaseModel):
+    service: str
+    date: str            # YYYY-MM-DD
+    start: str           # HH:MM (24h)
+    staff: str = ""
+    customer_name: str = ""
+    customer_phone: str = ""
+    customer_email: str = ""
+    address: str = ""
+    notes: str = ""
+    source: str = "bot"  # bot | dashboard | web
+    # Optional overrides; normally resolved from services_matrix.
+    service_price: float | None = None
+    service_duration_min: int | None = None
+    notify: bool = True  # send staff/owner alert on create
+
+
+class BookingPatch(BaseModel):
+    service: str | None = None
+    staff: str | None = None
+    date: str | None = None
+    start: str | None = None
+    service_duration_min: int | None = None
+    service_price: float | None = None
+    customer_name: str | None = None
+    customer_phone: str | None = None
+    customer_email: str | None = None
+    address: str | None = None
+    notes: str | None = None
+    status: str | None = None
+    payment_status: str | None = None
 
 
 class Lead(BaseModel):
@@ -121,6 +164,11 @@ def create(body: NewClient, x_lazusai_key: str | None = Header(default=None)):
         or ["complaint", "refund", "manager", "emergency", "lawyer"],
         "ai_personality": body.ai_personality
         or f"Friendly, concise front-desk assistant for {body.business_name}.",
+        "booking_enabled": body.booking_enabled,
+        "slot_minutes": body.slot_minutes or 30,
+        "services_matrix": body.services_matrix,
+        "staff": body.staff,
+        "integrations": body.integrations,
         "dashboard_user": cid,
         "active": True,
         "created_at": clients._now(),
@@ -236,6 +284,146 @@ def summary(client_id: str, x_lazusai_key: str | None = Header(default=None)):
     }
 
 
+# -------------------------------------------------------------------- bookings
+@app.get("/clients/{client_id}/availability")
+def get_availability(
+    client_id: str,
+    date: str,
+    service: str = "",
+    staff: str = "",
+    x_lazusai_key: str | None = Header(default=None),
+):
+    """Open appointment slots for a date. n8n calls this to offer times.
+    ?service= resolves duration from services_matrix; ?staff= narrows to one
+    team member."""
+    _auth(x_lazusai_key)
+    cfg = clients.load_client(client_id)
+    svc = _service_from_matrix(cfg, service) if service else None
+    duration = int((svc or {}).get("duration_min") or cfg.get("slot_minutes") or 30)
+    slots = bookings.availability(
+        client_id, date,
+        duration_min=duration,
+        business_hours=cfg.get("hours") or {},
+        staff_list=cfg.get("staff") or [],
+        staff=staff or None,
+        slot_minutes=int(cfg.get("slot_minutes") or 30),
+        service_name=service or None,
+    )
+    return {"date": date, "service": service, "duration_min": duration, "slots": slots}
+
+
+@app.get("/clients/{client_id}/bookings")
+def get_bookings(
+    client_id: str,
+    date: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    staff: str | None = None,
+    status: str | None = None,
+    x_lazusai_key: str | None = Header(default=None),
+):
+    _auth(x_lazusai_key)
+    return {
+        "bookings": bookings.list_bookings(
+            client_id, date=date, date_from=date_from, date_to=date_to,
+            staff=staff, status=status,
+        ),
+        "stats": bookings.stats(client_id),
+    }
+
+
+@app.post("/clients/{client_id}/bookings")
+def create_booking(client_id: str, body: NewBooking, x_lazusai_key: str | None = Header(default=None)):
+    """Create a booking. Resolves price/duration from services_matrix, mints a
+    payment link when the client requires a deposit/full payment, persists the
+    booking, and alerts the assigned staff + owner. This is the single call n8n
+    makes once the customer has confirmed service + time."""
+    _auth(x_lazusai_key)
+    cfg = clients.load_client(client_id)
+    if not cfg.get("booking_enabled"):
+        raise HTTPException(status_code=400, detail="booking_disabled")
+
+    svc = _service_from_matrix(cfg, body.service)
+    duration = body.service_duration_min or int((svc or {}).get("duration_min") or cfg.get("slot_minutes") or 30)
+    price = body.service_price if body.service_price is not None else float((svc or {}).get("price") or 0)
+
+    # Resolve payment up-front amount from the client's model (+ per-service deposit override).
+    pay_cfg = payments.payment_config(cfg)
+    if svc and svc.get("deposit") is not None and (pay_cfg.get("model") == "deposit"):
+        upfront = float(svc["deposit"])
+    else:
+        upfront = payments.amount_for(pay_cfg, price)
+
+    data = body.model_dump()
+    data.update({"service_duration_min": duration, "service_price": price,
+                 "amount_due": price, "deposit_amount": upfront if pay_cfg.get("model") == "deposit" else 0})
+
+    try:
+        booking = bookings.create(client_id, data)
+    except ValueError as e:
+        if str(e) == "slot_taken":
+            raise HTTPException(status_code=409, detail="slot_taken")
+        raise HTTPException(status_code=422, detail=str(e))
+
+    # Payment link (best-effort; booking is already saved).
+    payment = {"required": False}
+    if payments.is_enabled(cfg) and upfront > 0:
+        label = ("Deposit" if pay_cfg.get("model") == "deposit" else "Payment") + f" — {body.service}"
+        link, err = payments.create_payment_link(
+            cfg, amount=upfront, description=label,
+            reference_id=booking["id"], buyer_phone=body.customer_phone,
+        )
+        payment = {"required": True, "amount": upfront, "model": pay_cfg.get("model"),
+                   "url": link, "error": err}
+        if link:
+            bookings.update(client_id, booking["id"],
+                            {"payment_link": link, "payment_status": "deposit_pending"
+                             if pay_cfg.get("model") == "deposit" else "unpaid"})
+            booking = bookings.get_booking(client_id, booking["id"])
+
+    # Staff + owner alerts.
+    alerts = {"staff": [], "owner": False}
+    if body.notify:
+        alerts = notify.notify_staff_of_booking(cfg, booking)
+
+    return {"ok": True, "booking": booking, "payment": payment, "alerts": alerts}
+
+
+@app.patch("/clients/{client_id}/bookings/{booking_id}")
+def patch_booking(client_id: str, booking_id: str, body: BookingPatch, x_lazusai_key: str | None = Header(default=None)):
+    _auth(x_lazusai_key)
+    updated = bookings.update(client_id, booking_id, body.model_dump(exclude_none=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="not_found")
+    return {"ok": True, "booking": updated}
+
+
+@app.post("/clients/{client_id}/bookings/{booking_id}/cancel")
+def cancel_booking(client_id: str, booking_id: str, x_lazusai_key: str | None = Header(default=None)):
+    _auth(x_lazusai_key)
+    updated = bookings.cancel(client_id, booking_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="not_found")
+    return {"ok": True, "booking": updated}
+
+
+@app.get("/clients/{client_id}/identify")
+def identify_sender(client_id: str, phone: str, x_lazusai_key: str | None = Header(default=None)):
+    """Tell n8n whether an inbound number is staff or a customer, so the bot can
+    switch persona (staff get schedule/booking-management, customers get sales)."""
+    _auth(x_lazusai_key)
+    cfg = clients.load_client(client_id)
+    norm = _norm_phone(phone)
+    for s in cfg.get("staff") or []:
+        if _norm_phone(s.get("phone", "")) == norm and norm:
+            return {"role": "staff", "name": s.get("name"), "staff_role": s.get("role", "")}
+    return {"role": "customer"}
+
+
+def _norm_phone(s: str) -> str:
+    return "".join(ch for ch in str(s or "") if ch.isdigit())[-10:]
+
+
 # --------------------------------------------------------------------- helpers
 def _reindex(client_id: str, cfg: dict) -> int:
     """Turn structured config (services, pricing, FAQs, hours) into context
@@ -251,7 +439,51 @@ def _reindex(client_id: str, cfg: dict) -> int:
         docs.append({"id": "hours", "text": "Hours of operation: " + hours})
     for i, faq in enumerate(cfg.get("faqs", [])):
         docs.append({"id": f"faq-{i}", "text": f"Q: {faq.get('q')}\nA: {faq.get('a')}"})
+    # Booking-aware context so the bot knows what it can schedule and with whom.
+    if cfg.get("booking_enabled"):
+        matrix = cfg.get("services_matrix") or []
+        if matrix:
+            lines = []
+            for s in matrix:
+                bits = [s.get("name", "")]
+                if s.get("price") is not None:
+                    bits.append(f"${s['price']}")
+                if s.get("duration_min"):
+                    bits.append(f"{s['duration_min']} min")
+                if s.get("staff"):
+                    bits.append("with " + "/".join(s["staff"]))
+                lines.append(" — ".join(b for b in bits if b))
+            docs.append({"id": "bookable-services",
+                         "text": "Bookable services (name — price — duration — staff):\n" + "\n".join(lines)})
+        staff = cfg.get("staff") or []
+        if staff:
+            roster = "; ".join(
+                f"{s.get('name')}" + (f" ({s.get('role')})" if s.get('role') else "")
+                for s in staff
+            )
+            docs.append({"id": "team-roster", "text": "Team members who take appointments: " + roster})
+        pay = payments.payment_config(cfg)
+        if (pay.get("model") or "none") != "none":
+            if pay.get("model") == "deposit":
+                docs.append({"id": "booking-payment",
+                             "text": f"A deposit of ${pay.get('deposit_amount', 0)} is required to hold a booking; the balance is paid at the appointment."})
+            elif pay.get("model") == "full":
+                docs.append({"id": "booking-payment",
+                             "text": "Bookings are paid in full at the time of booking via a secure payment link."})
     return chroma_store.reindex_context(client_id, docs)
+
+
+def _service_from_matrix(cfg: dict, name: str) -> dict | None:
+    """Case-insensitive lookup of a bookable service by name."""
+    want = (name or "").strip().lower()
+    for s in cfg.get("services_matrix") or []:
+        if s.get("name", "").strip().lower() == want:
+            return s
+    return None
+
+
+def _staff_names(cfg: dict) -> set[str]:
+    return {s.get("name") for s in (cfg.get("staff") or []) if s.get("name")}
 
 
 def _messages_today(client_id: str) -> int:
