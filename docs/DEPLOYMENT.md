@@ -1,7 +1,7 @@
 # LazusAI Deployment Runbook
 
 Everything runs on the existing stack. No new paid services. Order matters:
-stand up the VPS services first, then n8n, then the Worker, then onboard.
+stand up the VPS services first, then n8n, then Pages, then onboard.
 
 ## 0. Prerequisites
 
@@ -51,8 +51,7 @@ Import the files in `n8n/` into `n8n.bookistudios.com`
 - `workflow-1-inbound-handler.json` — webhook `…/webhook/lazusai-inbound/:client_id`
 - `workflow-2-owner-alert.json` — webhook `…/webhook/lazusai-owner-alert/:client_id`
 - `workflow-3-daily-summary.json` — cron 08:00 daily
-- `workflow-4-appointment-reminders.json` — cron 18:00 daily (only acts on
-  booking-enabled clients; texts next-day customers a reminder)
+- `workflow-4-appointment-reminders.json` — booking notifications + reminders
 
 Set these n8n **environment variables** (Settings → Variables, or the n8n
 process env) so the Code nodes can reach the stack:
@@ -66,24 +65,14 @@ BLUEBUBBLES_PASSWORD=<bluebubbles password>
 TELEGRAM_BOT_TOKEN=<owner alert bot token>
 LAZUSAI_CORE_KEY=<shared secret>
 N8N_BASE_URL=https://n8n.bookistudios.com
-# Optional: business-local timezone offset in minutes (used for booking dates
-# and reminders), e.g. -300 for US Eastern. Defaults to UTC.
-TZ_OFFSET_MIN=0
 # Optional model id overrides to match deployed NIM containers:
 # NIM_MODEL_DEEPSEEK, NIM_MODEL_KIMI, NIM_MODEL_GLM, NIM_MODEL_MISTRAL
 ```
 
-The Core API also sends staff/owner booking alerts, so set the same
-`TELEGRAM_BOT_TOKEN`, `BLUEBUBBLES_URL`, and `BLUEBUBBLES_PASSWORD` in
-`/etc/lazusai/core.env`. Per-client Square/Stripe payment credentials are
-**not** environment variables — they're stored per client (dashboard →
-Settings → Payments, or during onboarding) so each business uses its own
-Square account.
-
 > `n8n-nodes-base.code` runs Node.js with `this.helpers.httpRequest`; no extra
 > packages or `NODE_FUNCTION_ALLOW_*` flags are required.
 
-Activate all three workflows. They are **multi-tenant**: the same WF1 instance
+Activate all workflows. They are **multi-tenant**: the same WF1 instance
 serves every client via the `:client_id` path param — you do **not** create a
 workflow per client.
 
@@ -91,19 +80,33 @@ workflow per client.
 
 ```bash
 npm install
-npx wrangler kv namespace create CLIENTS_KV          # paste id into wrangler.toml
-npx wrangler pages secret put N8N_API_KEY            # = LAZUSAI_CORE_KEY
-npm run deploy                                        # builds dist/_worker.js + deploys
+npx wrangler kv namespace create CLIENTS_KV     # paste id into wrangler.toml
+npx wrangler pages secret put N8N_API_KEY        # = LAZUSAI_CORE_KEY
+npm run deploy                                   # builds + deploys
 ```
 
-On first deploy wrangler will prompt you to create/select the Pages project named
-`lazusai`. It will then be live at `https://lazusai.pages.dev`.
+The deploy script (`scripts/build-worker.mjs`) builds two things into `dist/`:
 
-To also serve traffic from `lazusai.com`, add a custom domain in the Cloudflare
-Pages dashboard (Settings → Custom domains → Add a custom domain).
+| Output | Source | Serves |
+|--------|--------|--------|
+| `dist/index.html` | `landing/index.html` | `lazusai.com/` — marketing landing page |
+| `dist/_worker.js` | `admin/dashboard.html` + `src/worker.js` | `lazusai.com/admin/*`, `/webhook`, `/api/*` |
+
+Cloudflare Pages serves `index.html` at the root URL, and falls back to
+`_worker.js` for non-static paths. Both are versioned in the same Pages
+deployment.
+
+After the first deploy, add a custom domain in the Cloudflare Pages dashboard:
+
+1. Pages → lazusai → Custom domains → Set up custom domain
+2. Enter `lazusai.com`
+3. Cloudflare automatically adds the DNS records
+4. Wait a minute, then:
 
 ```bash
-curl https://lazusai.pages.dev/health
+curl https://lazusai.com/                    # → landing page
+curl https://lazusai.com/health              # → {"ok":true,...}
+curl https://lazusai.com/admin/demo-client   # → dashboard (after onboarding)
 ```
 
 ### BlueBubbles webhook
@@ -120,11 +123,11 @@ CORE_API_URL=http://127.0.0.1:8003 LAZUSAI_CORE_KEY=<secret> \
   python server/hermes/lazusai_tool.py status
 ```
 
-Register it with the running Hermes process (`lazusai_tool.register(hermes)`),
-or bind the `lazusai` command to `lazusai_tool.handle(text)`. Commands:
+Register it with the running Hermes process, or bind the `lazusai` command.
+Commands:
 
 ```
-lazusai new "Acme Plumbing" +15551234567
+lazusai new "Acme Plumbing" +155****4567
 lazusai status
 lazusai leads acme-plumbing
 lazusai pause acme-plumbing
@@ -155,19 +158,7 @@ Dashboard: `https://lazusai.com/admin/<client_id>` (HTTP Basic auth — the
    escalation check → BlueBubbles reply → log turn → (if escalated) WF2
 4. WF2: detect lead/escalation → log lead → Telegram the owner
 5. WF3: 08:00 daily → Core summary (NIM) → Telegram the owner
-6. WF4: 18:00 daily → next-day bookings → iMessage reminders + owner heads-up
-
-### Bookings & payments (booking-enabled clients)
-
-- WF1 recognizes staff numbers (Core `/identify`) and gives them a
-  schedule-aware persona; customers get the sales/booking persona.
-- When a customer confirms a service + time, the model emits a booking
-  directive; WF1 calls Core `/bookings`, which checks the slot, saves it,
-  mints a **Square/Stripe deposit or full-payment link** (per the client's
-  own credentials), and alerts the assigned staff (iMessage) + owner
-  (Telegram) — e.g. "Josh — Jacob booked a Haircut Thu Jul 2 at 5:00 PM."
-- The owner manages everything from the dashboard **Calendar / Bookings /
-  Team / Services / Settings** tabs.
+6. WF4: booking flow & reminders → Square/Stripe payment links → staff alerts
 
 ## Security notes
 
