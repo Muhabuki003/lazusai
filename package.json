@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-worker.mjs",
-    "dev": "wrangler dev",
-    "deploy": "node scripts/build-worker.mjs && wrangler deploy",
+    "dev": "wrangler pages dev dist --kv CLIENTS_KV",
+    "deploy": "node scripts/build-worker.mjs && wrangler pages deploy",
     "sync-clients": "bash scripts/sync_clients_to_kv.sh"
   },
   "devDependencies": {

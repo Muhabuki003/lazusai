@@ -1,5 +1,7 @@
 node_modules/
 .wrangler/
+dist/
+src/admin-html.generated.js
 .dev.vars
 *.log
 
