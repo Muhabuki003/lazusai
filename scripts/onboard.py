@@ -77,6 +77,85 @@ def ask_faqs() -> list[dict]:
     return faqs
 
 
+def ask_yn(prompt: str, default: bool = False) -> bool:
+    d = "Y/n" if default else "y/N"
+    val = input(f"{prompt} [{d}]: ").strip().lower()
+    if not val:
+        return default
+    return val.startswith("y")
+
+
+def ask_staff() -> list[dict]:
+    print("Team members who take appointments (blank name to finish):")
+    staff = []
+    while True:
+        name = input(f"  Name #{len(staff)+1}: ").strip()
+        if not name:
+            break
+        phone = ask("      Their phone/iMessage (recognized as staff, gets alerts)")
+        role = ask("      Role", "")
+        svcs = input("      Services they do (comma separated, blank = all): ").strip()
+        staff.append({
+            "name": name,
+            "phone": phone,
+            "role": role,
+            "services": [s.strip() for s in svcs.split(",") if s.strip()],
+            "notify": True,
+        })
+    return staff
+
+
+def ask_services_matrix() -> list[dict]:
+    print("Bookable services (blank name to finish):")
+    out = []
+    while True:
+        name = input(f"  Service #{len(out)+1}: ").strip()
+        if not name:
+            break
+        price = input("      Price ($, number): ").strip()
+        dur = input("      Duration (minutes) [30]: ").strip() or "30"
+        staff = input("      Staff who do it (comma separated, blank = anyone): ").strip()
+        deposit = input("      Deposit ($, blank = none): ").strip()
+        svc = {"name": name, "duration_min": int(dur) if dur.isdigit() else 30,
+               "staff": [s.strip() for s in staff.split(",") if s.strip()]}
+        if price:
+            try:
+                svc["price"] = float(price)
+            except ValueError:
+                pass
+        if deposit:
+            try:
+                svc["deposit"] = float(deposit)
+            except ValueError:
+                pass
+        out.append(svc)
+    return out
+
+
+def ask_payment() -> dict:
+    print("Payments — how does this business collect up front?")
+    print("  1) Nothing (pay on-site)   2) Deposit   3) Full payment")
+    choice = input("  Choose [1]: ").strip() or "1"
+    model = {"1": "none", "2": "deposit", "3": "full"}.get(choice, "none")
+    if model == "none":
+        return {"processor": "none", "model": "none"}
+    processor = (ask("  Processor (square/stripe)", "square") or "square").lower()
+    pay = {"processor": processor, "model": model, "currency": "USD"}
+    if model == "deposit":
+        dep = input("  Default deposit ($): ").strip()
+        try:
+            pay["deposit_amount"] = float(dep)
+        except ValueError:
+            pay["deposit_amount"] = 0
+    if processor == "square":
+        pay["square_access_token"] = ask("  Square access token")
+        pay["square_location_id"] = ask("  Square location ID")
+        pay["square_env"] = ask("  Square env (production/sandbox)", "production")
+    elif processor == "stripe":
+        pay["stripe_secret_key"] = ask("  Stripe secret key")
+    return pay
+
+
 def main() -> int:
     print("=== LazusAI client onboarding ===\n")
     business_name = ask("Business name")
@@ -99,6 +178,26 @@ def main() -> int:
         "AI personality / tone",
         f"Friendly, concise front-desk assistant for {business_name}.",
     )
+    print()
+
+    # --- Booking (optional) ---
+    booking_enabled = ask_yn("Should the bot take appointments for this client?", False)
+    staff: list[dict] = []
+    services_matrix: list[dict] = []
+    slot_minutes = 30
+    integrations: dict = {}
+    if booking_enabled:
+        print()
+        staff = ask_staff()
+        print()
+        services_matrix = ask_services_matrix()
+        print()
+        sm = ask("Booking slot interval in minutes", "30")
+        slot_minutes = int(sm) if sm.isdigit() else 30
+        print()
+        payment = ask_payment()
+        if payment:
+            integrations = {"payment": payment}
 
     payload = {
         "business_name": business_name,
@@ -110,6 +209,11 @@ def main() -> int:
         "pricing": pricing,
         "faqs": faqs,
         "ai_personality": personality,
+        "booking_enabled": booking_enabled,
+        "slot_minutes": slot_minutes,
+        "staff": staff,
+        "services_matrix": services_matrix,
+        "integrations": integrations,
     }
 
     print("\nCreating client via Core API...")
@@ -132,6 +236,8 @@ def main() -> int:
     else:
         print("   Routing:   run `npm run sync-clients` to push routes to the Worker KV.")
     print("\nWorkflows are parameterized by client_id; no per-client workflow setup needed.")
+    if payload["booking_enabled"]:
+        print("   Booking:   enabled — manage the calendar, team & services from the dashboard.")
     return 0
 
 

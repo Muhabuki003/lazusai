@@ -10,6 +10,13 @@ stack; there are **no external paid AI services**. All inference routes through
 the local NVIDIA NIM stack (DeepSeek primary, Kimi → GLM 5.2 → Mistral
 fallback).
 
+Booking-enabled clients also get a full **appointment system**: the bot books
+customers with a specific staff member and time, takes a **Square/Stripe deposit
+or full payment** (each business uses its own account), alerts staff over
+iMessage + the owner over Telegram, and sends next-day reminders. The owner runs
+it all from a per-client dashboard with a live **calendar**, bookings, team, and
+services editors.
+
 ```
  iMessage ─▶ BlueBubbles (home Mac) ─▶ Cloudflare Tunnel
                                           │  webhook
@@ -35,11 +42,14 @@ fallback).
 
 | Path | What it is | Runs on |
 |------|------------|---------|
-| `src/worker.js` | BlueBubbles webhook receiver + admin router | Cloudflare Workers |
+| `src/worker.js` | BlueBubbles webhook receiver + admin/API router | Cloudflare Workers |
+| `server/lib/bookings.py` | Booking store + availability engine | Hetzner VPS |
+| `server/lib/payments.py` | Per-client Square/Stripe payment links | Hetzner VPS |
+| `server/lib/notify.py` | Staff iMessage + owner Telegram alerts | Hetzner VPS |
 | `wrangler.toml` | Worker config, KV + routes | — |
 | `data/clients/` | Per-client config JSON + lookup index | source of truth (synced to KV) |
 | `data/leads/` | Captured leads per client | Hetzner VPS |
-| `n8n/` | Importable workflow JSON (WF1/WF2/WF3) | n8n |
+| `n8n/` | Importable workflow JSON (WF1 inbound+booking / WF2 alert / WF3 summary / WF4 reminders) | n8n |
 | `server/whisper_service/` | Whisper transcription REST API (port 8002) | Hetzner VPS |
 | `server/lib/` | Shared Python: NIM client, ChromaDB, client store | Hetzner VPS |
 | `server/hermes/` | Hermes `lazusai` tool (Telegram control) | Hetzner VPS |
@@ -78,5 +88,31 @@ Isolation is enforced at every layer:
 - **Config** — one `data/clients/<client_id>.json` per tenant.
 - **Knowledge** — one ChromaDB collection `client_<client_id>` per tenant.
 - **Leads** — `data/leads/<client_id>/leads.json` per tenant.
+- **Bookings** — `data/bookings/<client_id>/bookings.json` per tenant.
+- **Payments** — each client stores its own Square/Stripe credentials in its
+  config `integrations.payment`; no shared processor account.
 - **Workflows** — each n8n workflow is parameterized by `client_id`; a tenant's
   prompt, personality, and context never cross into another's.
+
+## Bookings
+
+Turn it on per client (dashboard → **Settings → Appointments**, or answer "yes"
+in `onboard.py`). Then:
+
+- **Services** define what's bookable — name, price, duration, which staff, and
+  an optional deposit.
+- **Team** members have a phone the bot recognizes as staff (they get alerts and
+  a schedule-aware persona, not the customer flow) and an optional per-day
+  schedule that overrides business hours.
+- The bot offers only real open slots (availability = staff schedule − existing
+  bookings) and never double-books.
+- On confirmation it mints a Square/Stripe **deposit or full-payment** link (if
+  configured) and alerts the assigned staff (iMessage) + owner (Telegram).
+- **WF4** texts next-day customers a reminder each evening.
+
+Run the backend test suite:
+
+```bash
+cd server && pip install -r tests/requirements-dev.txt
+python tests/test_bookings.py && python tests/test_payments.py && python tests/test_core_api.py
+```
