@@ -97,6 +97,11 @@ nav{
 
 /* ── iPhone Mockup ── */
 .hero-phone{display:flex;justify-content:center;align-items:center;position:relative}
+.hero-phone::after{
+  content:'';position:absolute;width:440px;height:440px;
+  background:radial-gradient(circle,rgba(232,49,42,.13) 0%,transparent 65%);
+  z-index:-1;pointer-events:none;
+}
 .phone-frame{
   width:320px;height:670px;
   background:#1a1a20;border-radius:48px;padding:14px;
@@ -104,7 +109,9 @@ nav{
     0 0 0 2px #333,
     0 25px 70px rgba(0,0,0,.35);
   position:relative;flex-shrink:0;
+  animation:phoneFloat 7s ease-in-out infinite;
 }
+@keyframes phoneFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
 .phone-screen{
   width:100%;height:100%;background:#f2f2f7;
   border-radius:36px;overflow:hidden;position:relative;
@@ -138,10 +145,18 @@ nav{
 .bubble.incoming .time{color:#8e8e93}
 .bubble.outgoing .time{color:rgba(255,255,255,.7)}
 .typing-indicator{align-self:flex-start;display:flex;gap:4px;padding:12px 16px;border-radius:16px;border-bottom-left-radius:4px;background:#e8e8ed}
+.typing-indicator.out{align-self:flex-end;background:#007aff;border-radius:16px;border-bottom-right-radius:4px}
+.typing-indicator.out span{background:rgba(255,255,255,.75)}
 .typing-indicator span{width:7px;height:7px;border-radius:50%;background:#b0b0b8;animation:bounce 1.4s infinite ease-in-out both}
 .typing-indicator span:nth-child(1){animation-delay:-.32s}
 .typing-indicator span:nth-child(2){animation-delay:-.16s}
 @keyframes bounce{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
+.bubble.appear{animation:bubbleIn .38s cubic-bezier(.2,.9,.3,1.2) both}
+@keyframes bubbleIn{from{opacity:0;transform:translateY(12px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){
+  .phone-frame{animation:none}
+  .bubble.appear{animation:none}
+}
 
 /* ── Sections ── */
 .section{padding:90px 40px}
@@ -349,7 +364,7 @@ footer a:hover{color:var(--ink)}
             <div class="chat-status">&#9679; Online</div>
           </div>
         </div>
-        <div class="chat-messages">
+        <div class="chat-messages" id="chatMessages">
           <div class="bubble incoming">Hi, how much for a drain cleaning?<span class="time">10:32 AM</span></div>
           <div class="bubble outgoing">Great question! Our drain cleaning starts at $120. Would you like me to schedule a technician?<span class="time">10:32 AM</span></div>
           <div class="bubble incoming">Yeah, can someone come today?<span class="time">10:33 AM</span></div>
@@ -563,5 +578,58 @@ footer a:hover{color:var(--ink)}
   <p>&copy; 2026 LAZUS AI &middot; A <a href="https://bookistudios.com">BOOKISTUDIO</a> service</p>
 </footer>
 
+<script>
+(function(){
+  var box = document.getElementById('chatMessages');
+  if (!box || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  var typing = box.querySelector('.typing-indicator');
+  var bubbles = [].slice.call(box.querySelectorAll('.bubble'));
+  bubbles.forEach(function(b){ b.remove(); });
+  typing.style.display = 'none';
+
+  var READ_MS = 1600, TYPE_IN_MS = 1200, TYPE_OUT_MS = 1800, RESTART_MS = 4000;
+
+  function scrollBottom(){ box.scrollTop = box.scrollHeight; }
+
+  function showBubble(b){
+    b.classList.add('appear');
+    box.appendChild(b);
+    scrollBottom();
+  }
+
+  function play(i){
+    if (i >= bubbles.length){
+      setTimeout(function(){
+        bubbles.forEach(function(b){ b.remove(); b.classList.remove('appear'); });
+        typing.style.display = 'none';
+        play(0);
+      }, RESTART_MS);
+      return;
+    }
+    var b = bubbles[i];
+    if (b.classList.contains('outgoing')){
+      // AI reply: show a typing bubble first
+      typing.classList.add('out');
+      typing.style.display = 'flex';
+      box.appendChild(typing);
+      scrollBottom();
+      setTimeout(function(){
+        typing.style.display = 'none';
+        showBubble(b);
+        setTimeout(function(){ play(i + 1); }, READ_MS);
+      }, TYPE_OUT_MS);
+    } else {
+      // Customer message: just arrives after a beat
+      setTimeout(function(){
+        showBubble(b);
+        setTimeout(function(){ play(i + 1); }, READ_MS);
+      }, TYPE_IN_MS);
+    }
+  }
+
+  play(0);
+})();
+</script>
 </body>
 </html>
