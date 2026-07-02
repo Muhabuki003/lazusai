@@ -1,0 +1,25 @@
+<svg viewBox="0 0 400 100" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(8, 10)">
+    <!-- Logo Icon -->
+    <g transform="translate(0, 0)">
+      <!-- Hexagon shape -->
+      <path d="M0 20L15 0H55L70 20L55 40H15L0 20Z" fill="none" stroke="#1a0000" stroke-width="3.5"/>
+      <!-- Robot head -->
+      <rect x="18" y="10" width="34" height="22" rx="11" fill="#e8312a"/>
+      <!-- Robot eyes -->
+      <circle cx="26" cy="18" r="3" fill="#fff"/>
+      <circle cx="44" cy="18" r="3" fill="#fff"/>
+      <!-- Robot mouth (graph) -->
+      <path d="M26 26q5 3 10 0" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <!-- Chat bubble -->
+      <path d="M50 28h8l4 4v-6h-12v-4h12q4 0 4 4v6q0 4-4 4h-8l-4 4v-6z" fill="#e8312a"/>
+      <!-- Dots -->
+      <circle cx="56" cy="30" r="1.5" fill="#fff"/>
+      <circle cx="61" cy="30" r="1.5" fill="#fff"/>
+      <circle cx="66" cy="30" r="1.5" fill="#fff"/>
+    </g>
+    <!-- Text: LAZUS AI -->
+    <text x="90" y="32" font-family="'Inter', Arial, sans-serif" font-size="40" font-weight="700" fill="#1a1000" letter-spacing="4">LAZUS</text>
+    <text x="245" y="32" font-family="'Inter', Arial, sans-serif" font-size="40" font-weight="7000" fill="#e8312a" letter-spacing="4">AI</text>
+  </g>
+</svg>

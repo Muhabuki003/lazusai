@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LazusAI — AI Receptionist for iMessage</title>
+  <meta name="description" content="LazusAI turns your business phone number into a 24/7 AI receptionist on iMessage. It answers customers, books jobs, and captures leads — no app, no widget.">
+  <meta property="og:title" content="LazusAI — AI Receptionist for iMessage">
+  <meta property="og:description" content="Never miss another customer. A 24/7 AI receptionist that answers texts, books jobs, and captures leads over iMessage.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://lazusai.com/">
+  <link rel="icon" type="image/svg+xml" href="lazusai-logo.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -420,7 +426,7 @@
 <!-- ========== NAVIGATION ========== -->
 <nav class="nav" id="mainNav">
   <a class="nav-logo" onclick="goToPage('home')">
-    <img src="lazusai-logo.png" alt="LazusAI" id="navLogoImg">
+    <img src="lazusai-logo.svg" alt="LazusAI" id="navLogoImg">
     <span>Lazus<span class="red">AI</span></span>
   </a>
   <div class="nav-links" id="navLinks">
@@ -502,7 +508,7 @@
                 </span>
               </div>
               <div class="phone-header">
-                <div class="phone-avatar"><img src="lazusai-logo.png" alt="LazusAI" id="phoneAvatarImg"></div>
+                <div class="phone-avatar"><img src="lazusai-logo.svg" alt="LazusAI" id="phoneAvatarImg"></div>
                 <div class="phone-header-name">Bright Ave Plumbing</div>
                 <div class="phone-header-sub">iMessage</div>
               </div>
@@ -533,7 +539,7 @@
 
   <!-- MARQUEE -->
   <section class="marquee-section">
-    <div class="marquee-label">Trusted by local service businesses</div>
+    <div class="marquee-label">Built for local service businesses</div>
     <div class="marquee-track">
       <div class="marquee-content">
         <span>Bright Ave Plumbing</span><span>NorthGate HVAC</span><span>Lumen Dental</span><span>Apex Roofing</span><span>Verde Landscaping</span><span>PrimeCut Barbers</span>
@@ -643,7 +649,7 @@
             <div class="demo-phone-screen">
               <div style="display:flex; align-items:center; gap:10px; padding:12px 12px 14px; border-bottom:1px solid #23232a;">
                 <div style="width:38px; height:38px; border-radius:50%; background:linear-gradient(150deg,#fdecea,#fbd7d3); display:flex; align-items:center; justify-content:center;">
-                  <img src="lazusai-logo.png" width="22" height="20" alt="LazusAI" style="display:block;" id="demoPhoneImg">
+                  <img src="lazusai-logo.svg" width="22" height="20" alt="LazusAI" style="display:block;" id="demoPhoneImg">
                 </div>
                 <div><div style="font-size:14px; font-weight:700;">NorthGate HVAC</div><div style="font-size:11px; color:#7a7a82;">via LazusAI · online</div></div>
               </div>
@@ -812,7 +818,7 @@
     <div class="footer-inner">
       <div class="footer-top">
         <div class="footer-logo">
-          <img src="lazusai-logo.png" alt="LazusAI" id="footerLogoImg">
+          <img src="lazusai-logo.svg" alt="LazusAI" id="footerLogoImg">
           <span>Lazus<span class="red">AI</span></span>
         </div>
         <div class="footer-links">
@@ -1020,7 +1026,7 @@
     <div class="footer-inner">
       <div class="footer-top">
         <div class="footer-logo">
-          <img src="lazusai-logo.png" alt="LazusAI" id="footerLogoImg2">
+          <img src="lazusai-logo.svg" alt="LazusAI" id="footerLogoImg2">
           <span>Lazus<span class="red">AI</span></span>
         </div>
         <div class="footer-links">
@@ -1165,7 +1171,7 @@
     <div class="footer-inner">
       <div class="footer-top">
         <div class="footer-logo">
-          <img src="lazusai-logo.png" alt="LazusAI" id="footerLogoImg3">
+          <img src="lazusai-logo.svg" alt="LazusAI" id="footerLogoImg3">
           <span>Lazus<span class="red">AI</span></span>
         </div>
         <div class="footer-links">
@@ -1314,7 +1320,7 @@
     <div class="footer-inner">
       <div class="footer-top">
         <div class="footer-logo">
-          <img src="lazusai-logo.png" alt="LazusAI" id="footerLogoImg4">
+          <img src="lazusai-logo.svg" alt="LazusAI" id="footerLogoImg4">
           <span>Lazus<span class="red">AI</span></span>
         </div>
         <div class="footer-links">
@@ -1440,7 +1446,7 @@
     <div class="footer-inner">
       <div class="footer-top">
         <div class="footer-logo">
-          <img src="lazusai-logo.png" alt="LazusAI" id="footerLogoImg5">
+          <img src="lazusai-logo.svg" alt="LazusAI" id="footerLogoImg5">
           <span>Lazus<span class="red">AI</span></span>
         </div>
         <div class="footer-links">
@@ -1477,23 +1483,23 @@
         <form id="contactForm" onsubmit="handleFormSubmit(event)">
           <div class="form-group">
             <label>Full name</label>
-            <input type="text" placeholder="John Smith" required>
+            <input type="text" name="name" placeholder="John Smith" required>
           </div>
           <div class="form-group">
             <label>Business name</label>
-            <input type="text" placeholder="Acme Plumbing" required>
+            <input type="text" name="business" placeholder="Acme Plumbing" required>
           </div>
           <div class="form-group">
             <label>Email</label>
-            <input type="email" placeholder="john@acme.com" required>
+            <input type="email" name="email" placeholder="john@acme.com" required>
           </div>
           <div class="form-group">
             <label>Phone</label>
-            <input type="tel" placeholder="(555) 123-4567">
+            <input type="tel" name="phone" placeholder="(555) 123-4567">
           </div>
           <div class="form-group">
             <label>Industry</label>
-            <select required>
+            <select name="industry" required>
               <option value="">Select your industry</option>
               <option>Plumbing</option>
               <option>HVAC</option>
@@ -1509,7 +1515,7 @@
           </div>
           <div class="form-group">
             <label>How many leads do you miss per month?</label>
-            <select>
+            <select name="missed_leads">
               <option value="">Select an estimate</option>
               <option>1-5</option>
               <option>6-15</option>
@@ -1520,7 +1526,7 @@
           </div>
           <div class="form-group">
             <label>Message (optional)</label>
-            <textarea placeholder="Tell us about your business and what you are looking for..."></textarea>
+            <textarea name="message" placeholder="Tell us about your business and what you are looking for..."></textarea>
           </div>
           <button type="submit" class="btn-primary" style="width:100%; justify-content:center;">Book my demo</button>
         </form>
@@ -1535,21 +1541,6 @@
           </div>
         </div>
         <div class="contact-info-item">
-          <div class="icon">💬</div>
-          <div class="text">
-            <h4>Text us</h4>
-            <p>(555) LAZUS-AI</p>
-            <p style="font-size:12px; color:var(--gray-400); margin-top:4px;">Yes, we use our own product</p>
-          </div>
-        </div>
-        <div class="contact-info-item">
-          <div class="icon">📍</div>
-          <div class="text">
-            <h4>Office</h4>
-            <p>123 Innovation Drive<br>San Francisco, CA 94105</p>
-          </div>
-        </div>
-        <div class="contact-info-item">
           <div class="icon">🕐</div>
           <div class="text">
             <h4>Hours</h4>
@@ -1559,7 +1550,7 @@
         <div style="background:var(--white); border:1px solid var(--gray-100); border-radius:16px; padding:24px; margin-top:12px;">
           <div style="font-size:14px; font-weight:600; margin-bottom:8px;">Prefer a call?</div>
           <p style="font-size:14px; color:var(--gray-500); margin:0 0 12px;">Schedule a 15-minute call with our team.</p>
-          <button class="btn-primary" style="font-size:14px; padding:10px 20px;" onclick="alert('Calendar booking coming soon!')">Schedule a call</button>
+          <button class="btn-primary" style="font-size:14px; padding:10px 20px;" onclick="document.getElementById('contactForm').scrollIntoView({behavior:'smooth'}); document.querySelector('#contactForm input')?.focus()">Request a call</button>
         </div>
       </div>
     </div>
@@ -1577,7 +1568,7 @@
     <div class="footer-inner">
       <div class="footer-top">
         <div class="footer-logo">
-          <img src="lazusai-logo.png" alt="LazusAI" id="footerLogoImg6">
+          <img src="lazusai-logo.svg" alt="LazusAI" id="footerLogoImg6">
           <span>Lazus<span class="red">AI</span></span>
         </div>
         <div class="footer-links">
@@ -1645,10 +1636,29 @@ function toggleMobileMenu() {
   toggle.classList.toggle('active');
 }
 
-function handleFormSubmit(e) {
+async function handleFormSubmit(e) {
   e.preventDefault();
-  alert('Thanks! We will be in touch within 24 hours to schedule your demo.');
-  e.target.reset();
+  const form = e.target;
+  const btn = form.querySelector('button[type="submit"]');
+  const data = Object.fromEntries(new FormData(form).entries());
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Sending…';
+  try {
+    const res = await fetch('/api/demo-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error('bad status ' + res.status);
+    form.reset();
+    btn.textContent = 'Request received ✓';
+    setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 5000);
+  } catch (err) {
+    btn.textContent = original;
+    btn.disabled = false;
+    alert('Something went wrong sending your request. Please email hello@lazusai.com instead.');
+  }
 }
 
 // ========== LENIS SMOOTH SCROLL ==========
