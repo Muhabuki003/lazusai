@@ -563,8 +563,8 @@ def _process_inbound(client_id: str, parsed: dict) -> None:
 
     inbound.send_imessage_reply(chat_guid, reply)
 
-    chroma_store.log_turn(client_id, {"role": "user", "text": text, "sender": sender})
-    chroma_store.log_turn(client_id, {"role": "assistant", "text": reply, "sender": sender})
+    chroma_store.log_turn(client_id, "user", text, sender=sender)
+    chroma_store.log_turn(client_id, "assistant", reply, sender=sender)
 
     # WF2: lead capture + owner alert.
     was_escalated = not is_staff and inbound.escalated(cfg, text)

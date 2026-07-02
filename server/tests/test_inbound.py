@@ -191,7 +191,8 @@ def test_webhook_end_to_end(tmp_path, monkeypatch):
                         lambda guid, msg: replies.setdefault("sent", (guid, msg)) or True)
     logged = []
     monkeypatch.setattr(core_app.chroma_store, "log_turn",
-                        lambda cid, t: logged.append((cid, t)))
+                        lambda cid, role, text, sender="": logged.append(
+                            (cid, {"role": role, "text": text, "sender": sender})))
     monkeypatch.setattr(core_app.chroma_store, "recent_turns", lambda cid, limit=10: [])
 
     r = client.post("/webhook", json=bb_event())
