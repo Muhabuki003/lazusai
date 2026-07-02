@@ -334,6 +334,28 @@
     #particle-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
     .scroll-progress { position: fixed; top: 0; left: 0; height: 3px; background: linear-gradient(90deg, var(--red), #ff6b6b); z-index: 1001; transform-origin: left; transform: scaleX(0); }
 
+    /* Get Started wizard */
+    .wizard-wrap { max-width: 720px; margin: 0 auto; }
+    .wizard-progress { display: flex; gap: 8px; margin-bottom: 36px; }
+    .wizard-progress span { flex: 1; height: 4px; border-radius: 2px; background: var(--gray-200); transition: background .3s; }
+    .wizard-progress span.done { background: var(--red); }
+    .wiz-step { display: none; }
+    .wiz-step.active { display: block; animation: wizIn .35s ease both; }
+    @keyframes wizIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    .wiz-nav { display: flex; justify-content: space-between; gap: 12px; margin-top: 28px; }
+    .plan-select { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+    .plan-option { border: 2px solid var(--gray-200); border-radius: 16px; padding: 22px; cursor: pointer; transition: all .25s; background: var(--white); }
+    .plan-option:hover { border-color: var(--gray-300); }
+    .plan-option.selected { border-color: var(--red); background: var(--red-light); }
+    .plan-option .p-name { font-family: var(--font-display); font-weight: 700; font-size: 17px; margin-bottom: 4px; }
+    .plan-option .p-price { font-size: 26px; font-weight: 800; }
+    .plan-option .p-price small { font-size: 13px; font-weight: 500; color: var(--gray-500); }
+    .plan-option .p-desc { font-size: 13px; color: var(--gray-500); margin-top: 6px; }
+    .wiz-status { border-radius: 14px; padding: 18px 22px; margin-bottom: 26px; font-size: 15px; display: none; }
+    .wiz-status.ok { display: block; background: #e6f7ee; color: #14713f; border: 1px solid #b9e7cd; }
+    .wiz-status.warn { display: block; background: #fdf3e6; color: #8a5a12; border: 1px solid #f2ddb8; }
+    @media (max-width: 700px) { .plan-select { grid-template-columns: 1fr; } }
+
     /* Services Page */
     .services-hero { position: relative; min-height: 70vh; display: flex; align-items: center; background: var(--black); color: var(--white); overflow: hidden; padding: 120px clamp(20px, 5vw, 56px) 80px; }
     .services-hero-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; }
@@ -473,7 +495,7 @@
         </h1>
         <p class="hero-desc reveal">LazusAI answers every text, books the job, and captures the lead — 24/7, in your business's own voice. No new app. It is just iMessage.</p>
         <div class="hero-cta-group reveal">
-          <button class="btn-primary" onclick="goToPage('contact')">Start free</button>
+          <button class="btn-primary" onclick="goToPage('getstarted')">Start free</button>
           <button class="btn-secondary" onclick="scrollToSection('demo')">
             <span class="play-icon">▶</span>See it work
           </button>
@@ -709,7 +731,7 @@
             <span><span class="check">✓</span> Booking & lead capture</span>
             <span><span class="check">✓</span> Owner alerts</span>
           </div>
-          <button class="pricing-btn" onclick="goToPage('contact')">Start free</button>
+          <button class="pricing-btn" onclick="goToPage('getstarted')">Start free</button>
         </div>
         <div class="pricing-card popular reveal reveal-delay-1">
           <div class="pricing-badge">Popular</div>
@@ -808,7 +830,7 @@
       <h2 class="cta-title reveal">Your next customer is texting right now.</h2>
       <p class="cta-desc reveal">Give them an instant, on-brand answer — and book the job before your competitor even sees the message.</p>
       <div class="cta-buttons reveal">
-        <button class="btn-primary" onclick="goToPage('contact')">Start free</button>
+        <button class="btn-primary" onclick="goToPage('getstarted')">Start free</button>
         <button class="cta-btn-outline" onclick="goToPage('pricing')">See pricing</button>
       </div>
     </div>
@@ -1216,7 +1238,7 @@
           <span><span class="check">✓</span> Basic knowledge base</span>
           <span><span class="check">✓</span> Email support</span>
         </div>
-        <button class="pricing-btn" onclick="goToPage('contact')">Start free</button>
+        <button class="pricing-btn" onclick="goToPage('getstarted')">Start free</button>
       </div>
       <div class="pricing-card popular reveal reveal-delay-1">
         <div class="pricing-badge">Popular</div>
@@ -1467,6 +1489,114 @@
 </div>
 
 <!-- ========== CONTACT PAGE ========== -->
+<!-- ========== GET STARTED PAGE ========== -->
+<div class="page" id="page-getstarted">
+  <section class="contact-hero">
+    <div class="contact-hero-content">
+      <div class="section-label reveal">Get started</div>
+      <h1 class="contact-hero-title reveal">Set up your AI receptionist.</h1>
+      <p class="contact-hero-desc reveal">Three quick steps. Your receptionist is configured from what you tell us here — most businesses are answering texts the same day.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wizard-wrap">
+      <div class="wiz-status" id="wizStatus"></div>
+      <div class="wizard-progress"><span class="done" id="wp1"></span><span id="wp2"></span><span id="wp3"></span></div>
+      <div class="contact-form">
+        <form id="signupForm" onsubmit="submitSignup(event)">
+
+          <div class="wiz-step active" id="wizStep1">
+            <h3 style="font-size:24px; font-weight:700; margin-bottom:8px;">Your business</h3>
+            <p style="font-size:15px; color:var(--gray-500); margin-bottom:28px;">The basics — who your receptionist works for.</p>
+            <div class="form-group">
+              <label>Your name</label>
+              <input type="text" name="name" placeholder="John Smith" required>
+            </div>
+            <div class="form-group">
+              <label>Business name</label>
+              <input type="text" name="business" placeholder="Acme Plumbing" required>
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" name="email" placeholder="john@acme.com" required>
+            </div>
+            <div class="form-group">
+              <label>Phone</label>
+              <input type="tel" name="phone" placeholder="(555) 123-4567">
+            </div>
+            <div class="form-group">
+              <label>Industry</label>
+              <select name="industry" required>
+                <option value="">Select your industry</option>
+                <option>Plumbing</option>
+                <option>HVAC</option>
+                <option>Dental / Medical</option>
+                <option>Roofing</option>
+                <option>Landscaping</option>
+                <option>Salon / Barber</option>
+                <option>Electrical</option>
+                <option>Auto Repair</option>
+                <option>General Contracting</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div class="wiz-nav">
+              <span></span>
+              <button type="button" class="btn-primary" onclick="wizGo(2)">Next →</button>
+            </div>
+          </div>
+
+          <div class="wiz-step" id="wizStep2">
+            <h3 style="font-size:24px; font-weight:700; margin-bottom:8px;">Teach the AI</h3>
+            <p style="font-size:15px; color:var(--gray-500); margin-bottom:28px;">What should it know? Rough notes are fine — we polish everything during setup.</p>
+            <div class="form-group">
+              <label>Services &amp; rough pricing</label>
+              <textarea name="services" placeholder="Drain cleaning from $120, water heater install from $950, emergency callout $60 after hours..."></textarea>
+            </div>
+            <div class="form-group">
+              <label>Hours</label>
+              <input type="text" name="hours" placeholder="Mon–Fri 8am–6pm, Sat 9am–2pm, emergencies 24/7">
+            </div>
+            <div class="form-group">
+              <label>Common customer questions</label>
+              <textarea name="faqs" placeholder="Do you offer free quotes? Are you licensed and insured? What areas do you cover?"></textarea>
+            </div>
+            <div class="wiz-nav">
+              <button type="button" class="btn-secondary" onclick="wizGo(1)">← Back</button>
+              <button type="button" class="btn-primary" onclick="wizGo(3)">Next →</button>
+            </div>
+          </div>
+
+          <div class="wiz-step" id="wizStep3">
+            <h3 style="font-size:24px; font-weight:700; margin-bottom:8px;">Pick your plan</h3>
+            <p style="font-size:15px; color:var(--gray-500); margin-bottom:20px;">Cancel any time. You go live once we connect your number — usually same day.</p>
+            <div class="plan-select">
+              <div class="plan-option selected" data-plan="starter" onclick="selectPlan(this)">
+                <div class="p-name">Starter</div>
+                <div class="p-price">$149<small>/mo</small></div>
+                <div class="p-desc">1 business · 24/7 AI replies · booking &amp; lead capture · owner alerts</div>
+              </div>
+              <div class="plan-option" data-plan="pro" onclick="selectPlan(this)">
+                <div class="p-name">Pro</div>
+                <div class="p-price">$349<small>/mo</small></div>
+                <div class="p-desc">Everything in Starter + custom voice, voice notes, knowledge training, priority logic</div>
+              </div>
+            </div>
+            <input type="hidden" name="plan" value="starter">
+            <div class="wiz-nav">
+              <button type="button" class="btn-secondary" onclick="wizGo(2)">← Back</button>
+              <button type="submit" class="btn-primary" id="signupBtn">Continue to payment →</button>
+            </div>
+            <p style="font-size:12.5px; color:var(--gray-400); margin-top:16px;">Secure checkout via Stripe. After payment we connect your business number to iMessage and run test conversations with you before going live.</p>
+          </div>
+
+        </form>
+      </div>
+    </div>
+  </section>
+</div>
+
 <div class="page" id="page-contact">
   <section class="contact-hero">
     <div class="contact-hero-content">
@@ -2078,8 +2208,86 @@ function initPhoneParallax() {
   }, { passive: true });
 }
 
+// ========== GET STARTED WIZARD ==========
+function wizGo(step) {
+  if (step > 1) {
+    // Validate visible required fields before advancing.
+    const current = document.querySelector('.wiz-step.active');
+    for (const el of current.querySelectorAll('[required]')) {
+      if (!el.value) { el.reportValidity(); return; }
+    }
+  }
+  document.querySelectorAll('.wiz-step').forEach(s => s.classList.remove('active'));
+  document.getElementById('wizStep' + step).classList.add('active');
+  for (let i = 1; i <= 3; i++) {
+    document.getElementById('wp' + i).classList.toggle('done', i <= step);
+  }
+}
+
+function selectPlan(el) {
+  document.querySelectorAll('.plan-option').forEach(p => p.classList.remove('selected'));
+  el.classList.add('selected');
+  document.querySelector('#signupForm input[name="plan"]').value = el.dataset.plan;
+}
+
+async function submitSignup(e) {
+  e.preventDefault();
+  const form = e.target;
+  const btn = document.getElementById('signupBtn');
+  const data = Object.fromEntries(new FormData(form).entries());
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Setting up…';
+  try {
+    const res = await fetch('/api/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error || 'signup_failed');
+    if (out.mode === 'checkout' && out.checkout_url) {
+      window.location.href = out.checkout_url;
+      return;
+    }
+    // Payments not live yet — signup captured as a lead.
+    form.reset();
+    wizGo(1);
+    showWizStatus('ok', "You're on the list! We received your setup details and will text you within 24 hours to activate your receptionist.");
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = original;
+    showWizStatus('warn', 'Something went wrong. Please try again or email hello@lazusai.com.');
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = original;
+}
+
+function showWizStatus(kind, msg) {
+  const el = document.getElementById('wizStatus');
+  el.className = 'wiz-status ' + kind;
+  el.textContent = msg;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function initGetStartedRoute() {
+  const path = window.location.pathname.replace(/\/$/, '');
+  if (path === '/get-started') {
+    goToPage('getstarted');
+    const status = new URLSearchParams(window.location.search).get('status');
+    if (status === 'success') {
+      showWizStatus('ok', "Payment received — welcome aboard! 🎉 We're provisioning your receptionist now and will text you today to connect your number and go live.");
+      document.getElementById('signupForm').style.display = 'none';
+    } else if (status === 'cancelled') {
+      showWizStatus('warn', 'Checkout was cancelled — your details are still here if you want to pick up where you left off.');
+    }
+  }
+}
+
 // ========== INIT ALL ==========
 document.addEventListener('DOMContentLoaded', () => {
+  initGetStartedRoute();
   loadLogos();
   initLenis();
   initGSAP();

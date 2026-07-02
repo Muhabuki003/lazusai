@@ -17,15 +17,16 @@ from __future__ import annotations
 import os
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import BackgroundTasks, Body, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Make the shared libs importable whether run from repo root or server/.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import bookings, cf_kv, chroma_store, clients, nim_client, notify, payments  # noqa: E402
+from lib import bookings, cf_kv, chroma_store, clients, inbound, nim_client, notify, payments  # noqa: E402
 
 CORE_KEY = os.environ.get("LAZUSAI_CORE_KEY", "")
 
@@ -421,6 +422,168 @@ def cancel_booking(client_id: str, booking_id: str, x_lazusai_key: str | None = 
     if not updated:
         raise HTTPException(status_code=404, detail="not_found")
     return {"ok": True, "booking": updated}
+
+
+@app.post("/webhook")
+def webhook(
+    background: BackgroundTasks,
+    event: dict = Body(...),
+    x_lazusai_key: str | None = Header(default=None),
+):
+    """Inbound BlueBubbles message (forwarded by the lazusai.com Pages worker
+    with the shared key). Routes to a tenant and runs the full AI pipeline in
+    the background so BlueBubbles gets an immediate 200."""
+    _auth(x_lazusai_key)
+
+    parsed = inbound.parse_webhook(event)
+    if parsed.get("ignored"):
+        return {"ok": True, "ignored": parsed["ignored"]}
+
+    index = clients.rebuild_index()
+    client_id = inbound.route_client(parsed, index.get("routes") or {})
+    if not client_id:
+        # Unknown number — drop silently (multi-tenant isolation: never guess).
+        return {"ok": True, "ignored": "unknown_client", "sender": parsed.get("sender")}
+
+    cfg = clients.load_client(client_id)
+    if cfg.get("active") is False:
+        return {"ok": True, "ignored": "client_inactive", "client_id": client_id}
+
+    background.add_task(_process_inbound, client_id, parsed)
+    return {"ok": True, "client_id": client_id, "voice_note": parsed.get("voice_note", False)}
+
+
+def _process_inbound(client_id: str, parsed: dict) -> None:
+    """WF1 + WF2 pipeline: transcribe -> prompt -> LLM (booking tool-loop) ->
+    reply via BlueBubbles -> log turns -> lead capture + owner alert."""
+    cfg = clients.load_client(client_id)
+    sender = parsed.get("sender", "")
+    chat_guid = parsed.get("chat_guid", "")
+    text = parsed.get("text", "")
+    today = inbound.today_iso()
+
+    if parsed.get("voice_note"):
+        text = inbound.transcribe_voice_note(parsed) or text
+    if not text.strip():
+        return
+
+    who = identify_sender(client_id, sender, x_lazusai_key=CORE_KEY)
+    is_staff = who.get("role") == "staff"
+
+    turns = chroma_store.recent_turns(client_id, limit=10)
+    recent = [
+        {"role": "assistant" if t.get("role") == "assistant" else "user",
+         "content": t.get("text", "")}
+        for t in turns
+    ]
+
+    if is_staff:
+        todays = bookings.list_bookings(client_id, date=today, staff=who.get("name"))
+        system_prompt = inbound.build_staff_prompt(cfg, who, todays, sender, today)
+    else:
+        system_prompt = inbound.build_customer_prompt(cfg, sender, today)
+
+    def llm(messages: list[dict]) -> str:
+        try:
+            return nim_client.chat(messages, temperature=0.4, max_tokens=500).text.strip()
+        except nim_client.NimUnavailable:
+            return ""
+
+    messages = [{"role": "system", "content": system_prompt}, *recent,
+                {"role": "user", "content": text}]
+    reply = llm(messages)
+
+    # Booking tool-loop (max 2 iterations), mirroring the n8n orchestrator.
+    for _ in range(2):
+        if not cfg.get("booking_enabled"):
+            break
+        d = inbound.parse_directive(reply)
+        if not d:
+            break
+        args = d["args"]
+        if d["verb"] == "AVAIL":
+            try:
+                av = get_availability(
+                    client_id, date=args.get("date") or today,
+                    service=args.get("service", ""), staff=args.get("staff", ""),
+                    x_lazusai_key=CORE_KEY,
+                )
+                slots = ", ".join(
+                    s["start"] + (f" ({s['staff']})" if s.get("staff") else "")
+                    for s in (av.get("slots") or [])[:8]
+                )
+            except Exception:  # noqa: BLE001
+                slots = ""
+            tool_msg = (
+                f"AVAIL result for {args.get('service')} on {args.get('date')}: {slots}. "
+                "Offer these to the customer." if slots else
+                f"AVAIL result: no open slots for {args.get('service')} on "
+                f"{args.get('date')}. Suggest another day."
+            )
+        else:  # BOOK
+            try:
+                r = create_booking(
+                    client_id,
+                    NewBooking(
+                        service=args.get("service", ""), staff=args.get("staff", ""),
+                        date=args.get("date", today), start=args.get("start", ""),
+                        customer_name=args.get("name", ""),
+                        customer_phone=args.get("phone") or sender,
+                        notes=args.get("notes", ""), source="bot",
+                    ),
+                    x_lazusai_key=CORE_KEY,
+                )
+                pay = r.get("payment") or {}
+                extra = ""
+                if pay.get("required") and pay.get("url"):
+                    label = (f"deposit of ${pay['amount']}" if pay.get("model") == "deposit"
+                             else f"payment of ${pay['amount']}")
+                    extra = (" Include this payment link verbatim in your reply: "
+                             f"A {label} holds the spot — pay here: {pay['url']}")
+                tool_msg = (
+                    f"BOOK success: {args.get('service')} on {args.get('date')} at "
+                    f"{args.get('start')}"
+                    + (f" with {args['staff']}" if args.get("staff") else "")
+                    + f". Confirm warmly to the customer.{extra}"
+                )
+            except HTTPException as e:
+                tool_msg = (
+                    "BOOK failed: that time was just taken. Apologize and offer to "
+                    "check other times." if e.status_code == 409 else
+                    "BOOK failed due to a system error. Apologize and offer to have "
+                    "the team follow up."
+                )
+        messages = [{"role": "system", "content": system_prompt}, *recent,
+                    {"role": "user", "content": text},
+                    {"role": "assistant", "content": reply},
+                    {"role": "system", "content": tool_msg}]
+        reply = llm(messages) or reply
+
+    reply = inbound.strip_directive(reply) or inbound.FALLBACK_REPLY
+
+    inbound.send_imessage_reply(chat_guid, reply)
+
+    chroma_store.log_turn(client_id, {"role": "user", "text": text, "sender": sender})
+    chroma_store.log_turn(client_id, {"role": "assistant", "text": reply, "sender": sender})
+
+    # WF2: lead capture + owner alert.
+    was_escalated = not is_staff and inbound.escalated(cfg, text)
+    lead = None if is_staff else inbound.detect_lead(text, sender)
+    if lead or was_escalated:
+        lead = lead or {"sender": sender, "phone": sender, "message": text}
+        lead.update({"ai_response": reply, "escalated": was_escalated,
+                     "summary": ("ESCALATION: " if was_escalated else "") + text[:200]})
+        clients.append_lead(client_id, {**lead, "captured_at":
+                                        datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+        chroma_store.add_lead(client_id, lead)
+        owner = cfg.get("owner_telegram", "")
+        if owner:
+            prefix = "🚨 Escalation" if was_escalated else "🎯 New lead"
+            notify.send_telegram(
+                owner,
+                f"{prefix} — {cfg.get('business_name', client_id)}\n"
+                f"From: {lead.get('name') or sender}\n{text[:300]}",
+            )
 
 
 @app.get("/clients/{client_id}/identify")
