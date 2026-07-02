@@ -1,0 +1,2089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LazusAI — AI Receptionist for iMessage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+  <script src="https://unpkg.com/lenis@1.1.13/dist/lenis.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --red: #e8312a; --red-light: #fdecea; --red-dark: #c42a24;
+      --black: #0a0a0c; --black-light: #16161c;
+      --white: #ffffff; --cream: #fbf9f4; --cream-dark: #f5f2eb;
+      --gray-100: #f0f0f2; --gray-200: #e2e2e6; --gray-300: #c4c4ca;
+      --gray-400: #9a9aa2; --gray-500: #66666e; --gray-600: #3a3a42;
+      --gray-700: #2a2a32; --green: #1faf6b; --blue: #0b93f6;
+      --font-main: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-display: 'Space Grotesk', sans-serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: auto; }
+    html.lenis, html.lenis body { height: auto; }
+    .lenis.lenis-smooth { scroll-behavior: auto !important; }
+    body {
+      font-family: var(--font-main);
+      background: var(--cream);
+      color: var(--black);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 4px; }
+    ::selection { background: rgba(232,49,42,.2); color: var(--black); }
+
+    .nav {
+      position: fixed; top: 0; left: 0; right: 0;
+      z-index: 1000;
+      padding: 20px clamp(20px, 5vw, 56px);
+      display: flex; align-items: center; justify-content: space-between;
+      transition: all 0.5s cubic-bezier(.16,1,.3,1);
+    }
+    .nav.scrolled {
+      background: rgba(251,249,244,.9);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      box-shadow: 0 1px 0 rgba(20,20,30,.06);
+      padding: 14px clamp(20px, 5vw, 56px);
+    }
+    .nav-logo { display: flex; align-items: center; gap: 12px; text-decoration: none; cursor: pointer; }
+    .nav-logo img { width: 36px; height: auto; display: block; }
+    .nav-logo span { font-family: var(--font-display); font-weight: 700; font-size: 22px; letter-spacing: -0.02em; color: var(--black); }
+    .nav-logo span .red { color: var(--red); }
+    .nav-links { display: flex; align-items: center; gap: 36px; }
+    .nav-links a { font-size: 14px; font-weight: 500; color: var(--gray-600); text-decoration: none; position: relative; transition: color 0.3s ease; cursor: pointer; }
+    .nav-links a::after { content: ''; position: absolute; bottom: -4px; left: 0; width: 0; height: 2px; background: var(--red); transition: width 0.3s cubic-bezier(.16,1,.3,1); }
+    .nav-links a:hover { color: var(--black); }
+    .nav-links a:hover::after { width: 100%; }
+    .nav-links a.active { color: var(--black); }
+    .nav-links a.active::after { width: 100%; }
+    .nav-cta { display: inline-flex; align-items: center; gap: 8px; background: var(--black); color: var(--white); font-weight: 600; font-size: 14px; padding: 11px 22px; border-radius: 999px; text-decoration: none; transition: all 0.3s ease; cursor: pointer; border: none; font-family: var(--font-main); }
+    .nav-cta:hover { background: var(--red); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(232,49,42,.3); }
+    .nav-mobile-toggle { display: none; flex-direction: column; gap: 5px; cursor: pointer; padding: 8px; background: none; border: none; }
+    .nav-mobile-toggle span { display: block; width: 24px; height: 2px; background: var(--black); transition: all 0.3s ease; border-radius: 1px; }
+    .nav-mobile-toggle.active span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
+    .nav-mobile-toggle.active span:nth-child(2) { opacity: 0; }
+    .nav-mobile-toggle.active span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
+    .nav-mobile-menu { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--cream); z-index: 999; flex-direction: column; align-items: center; justify-content: center; gap: 32px; }
+    .nav-mobile-menu.active { display: flex; }
+    .nav-mobile-menu a { font-size: 24px; font-weight: 600; color: var(--black); text-decoration: none; cursor: pointer; }
+    .nav-mobile-menu .nav-cta { font-size: 16px; padding: 14px 32px; }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .hero { position: relative; min-height: 100vh; display: flex; align-items: center; overflow: hidden; padding: 120px clamp(20px, 5vw, 56px) 60px; }
+    .hero-bg-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+    .hero-content { position: relative; z-index: 2; max-width: 1320px; margin: 0 auto; width: 100%; display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 60px; align-items: center; }
+    .hero-left { position: relative; z-index: 3; }
+    .hero-badge { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-display); font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--red); background: var(--red-light); padding: 8px 16px; border-radius: 999px; margin-bottom: 28px; }
+    .hero-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); animation: pulse-dot 2s ease-in-out infinite; }
+    @keyframes pulse-dot { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } }
+    .hero-title { font-family: var(--font-display); font-size: clamp(44px, 6.5vw, 84px); line-height: 1.0; letter-spacing: -0.04em; font-weight: 700; margin-bottom: 24px; }
+    .hero-title .red { color: var(--red); }
+    .hero-title .line { display: block; overflow: hidden; }
+    .hero-title .line span { display: block; }
+    .hero-desc { font-size: clamp(16px, 1.4vw, 20px); line-height: 1.6; color: var(--gray-500); max-width: 480px; margin-bottom: 36px; }
+    .hero-cta-group { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 40px; }
+    .btn-primary { display: inline-flex; align-items: center; gap: 8px; background: var(--red); color: var(--white); font-weight: 600; font-size: 15px; padding: 15px 28px; border-radius: 999px; text-decoration: none; border: none; cursor: pointer; transition: all 0.3s cubic-bezier(.16,1,.3,1); font-family: var(--font-main); box-shadow: 0 12px 30px rgba(232,49,42,.25); }
+    .btn-primary:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 20px 40px rgba(232,49,42,.35); }
+    .btn-secondary { display: inline-flex; align-items: center; gap: 10px; background: var(--white); color: var(--black); font-weight: 600; font-size: 15px; padding: 15px 26px; border-radius: 999px; text-decoration: none; border: 1px solid var(--gray-200); cursor: pointer; transition: all 0.3s cubic-bezier(.16,1,.3,1); font-family: var(--font-main); }
+    .btn-secondary:hover { border-color: var(--red); transform: translateY(-3px); box-shadow: 0 10px 30px rgba(20,20,30,.08); }
+    .btn-secondary .play-icon { width: 24px; height: 24px; border-radius: 50%; background: var(--black); color: var(--white); display: flex; align-items: center; justify-content: center; font-size: 8px; }
+    .hero-stats { display: flex; gap: 28px; flex-wrap: wrap; }
+    .hero-stat { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--gray-400); }
+    .hero-stat .check { width: 18px; height: 18px; border-radius: 50%; background: var(--green); color: var(--white); display: flex; align-items: center; justify-content: center; font-size: 9px; }
+
+    .hero-right { position: relative; display: flex; justify-content: center; align-items: center; perspective: 1500px; z-index: 2; }
+    .phone-3d-container { transform-style: preserve-3d; will-change: transform; }
+    .phone-mockup { position: relative; width: 300px; height: 620px; border-radius: 48px; background: linear-gradient(148deg, #efeee9 0%, #b9b6ae 9%, #726f68 19%, #403e3a 28%, #65635d 38%, #a09d94 48%, #d9d6cd 56%, #98958c 68%, #4c4a45 80%, #8b887f 90%, #e4e1d8 100%); padding: 12px; box-shadow: 0 60px 100px -30px rgba(20,20,30,.45), 0 16px 34px rgba(20,20,30,.15), inset 0 1.5px 1px rgba(255,255,255,.55), inset 0 -1.5px 2px rgba(0,0,0,.4); }
+    .phone-mockup::before { content: ''; position: absolute; left: -3px; top: 90px; width: 3px; height: 26px; border-radius: 2px 0 0 2px; background: linear-gradient(90deg, #1c1c1e, #3a3a3c); }
+    .phone-mockup::after { content: ''; position: absolute; left: -3px; top: 140px; width: 3px; height: 48px; border-radius: 2px 0 0 2px; background: linear-gradient(90deg, #1c1c1e, #3a3a3c); }
+    .phone-screen { width: 100%; height: 100%; border-radius: 38px; background: var(--white); overflow: hidden; display: flex; flex-direction: column; position: relative; }
+    .phone-notch { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 100px; height: 28px; background: #0a0a0c; border-radius: 16px; z-index: 20; }
+    .phone-status { display: flex; justify-content: space-between; align-items: center; padding: 14px 24px 6px; font-size: 12px; font-weight: 700; color: var(--black); }
+    .phone-header { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0 12px; border-bottom: 1px solid var(--gray-100); }
+    .phone-avatar { width: 48px; height: 48px; border-radius: 50%; background: var(--red-light); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(232,49,42,.15); }
+    .phone-avatar img { width: 28px; height: auto; }
+    .phone-header-name { font-size: 13px; font-weight: 700; }
+    .phone-header-sub { font-size: 10px; color: var(--gray-400); }
+    .phone-chat { flex: 1; overflow: hidden; padding: 14px 12px 8px; display: flex; flex-direction: column; gap: 7px; }
+    .msg { max-width: 78%; padding: 8px 13px; border-radius: 17px; font-size: 13px; line-height: 1.35; opacity: 0; transform: translateY(8px) scale(0.96); transition: all 0.5s cubic-bezier(.16,1,.3,1); }
+    .msg.in { align-self: flex-end; background: var(--blue); color: var(--white); }
+    .msg.ai { align-self: flex-start; background: #e9e9eb; color: var(--black); }
+    .msg.show { opacity: 1; transform: translateY(0) scale(1); }
+    .msg-typing { align-self: flex-start; background: #e9e9eb; padding: 10px 14px; border-radius: 17px; display: none; gap: 4px; align-items: center; }
+    .msg-typing span { width: 6px; height: 6px; border-radius: 50%; background: #9a9aa0; animation: typing-bounce 1.3s infinite; }
+    .msg-typing span:nth-child(2) { animation-delay: 0.18s; }
+    .msg-typing span:nth-child(3) { animation-delay: 0.36s; }
+    @keyframes typing-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
+    .phone-input { padding: 10px 12px 14px; display: flex; align-items: center; gap: 8px; }
+    .phone-input-bar { flex: 1; border: 1px solid var(--gray-200); border-radius: 999px; padding: 8px 14px; font-size: 12px; color: var(--gray-400); }
+    .phone-input-send { width: 28px; height: 28px; border-radius: 50%; background: var(--blue); color: var(--white); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+    .phone-home-bar { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); width: 110px; height: 4px; border-radius: 3px; background: var(--black); opacity: 0.8; z-index: 30; }
+
+    .float-chip { position: absolute; z-index: 5; background: var(--white); border-radius: 16px; padding: 12px 16px; box-shadow: 0 18px 40px rgba(20,20,30,.12); display: flex; align-items: center; gap: 11px; will-change: transform; }
+    .float-chip.dark { background: var(--black-light); color: var(--white); box-shadow: 0 18px 40px rgba(20,20,30,.2); }
+    .float-chip .chip-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+    .float-chip .chip-text .chip-title { font-size: 13px; font-weight: 700; }
+    .float-chip .chip-text .chip-sub { font-size: 11px; color: var(--gray-400); }
+    .float-chip.dark .chip-text .chip-sub { color: var(--gray-300); }
+    .chip-1 { top: -5%; left: -20%; }
+    .chip-2 { top: 30%; right: -22%; }
+    .chip-3 { bottom: 8%; left: -15%; }
+
+    .scroll-hint { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--gray-400); font-size: 11px; font-family: var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; z-index: 3; }
+    .scroll-hint .line { width: 1px; height: 36px; background: linear-gradient(var(--gray-300), transparent); }
+
+    .marquee-section { padding: 40px 0; border-top: 1px solid var(--gray-100); border-bottom: 1px solid var(--gray-100); overflow: hidden; background: var(--white); }
+    .marquee-label { text-align: center; font-family: var(--font-display); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gray-400); margin-bottom: 24px; }
+    .marquee-track { display: flex; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+    .marquee-content { display: flex; gap: 80px; padding-right: 80px; animation: marquee-scroll 30s linear infinite; white-space: nowrap; font-size: 22px; font-weight: 800; color: var(--gray-300); letter-spacing: -0.02em; font-family: var(--font-display); }
+    @keyframes marquee-scroll { to { transform: translateX(-50%); } }
+
+    .section { max-width: 1200px; margin: 0 auto; padding: clamp(80px, 10vw, 140px) clamp(20px, 5vw, 56px); }
+    .section-header { text-align: center; margin-bottom: 64px; }
+    .section-label { font-family: var(--font-display); font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--red); margin-bottom: 16px; display: inline-block; }
+    .section-title { font-family: var(--font-display); font-size: clamp(32px, 4.5vw, 56px); line-height: 1.05; letter-spacing: -0.03em; font-weight: 700; margin: 0 auto; max-width: 720px; }
+    .section-subtitle { font-size: 18px; line-height: 1.55; color: var(--gray-500); max-width: 640px; margin: 16px auto 0; }
+
+    .steps-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+    .step-card { background: var(--white); border: 1px solid var(--gray-100); border-radius: 24px; padding: 32px; box-shadow: 0 10px 30px rgba(20,20,30,.04); transition: all 0.5s cubic-bezier(.16,1,.3,1); position: relative; overflow: hidden; }
+    .step-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--red), var(--red-dark)); transform: scaleX(0); transform-origin: left; transition: transform 0.5s cubic-bezier(.16,1,.3,1); }
+    .step-card:hover::before { transform: scaleX(1); }
+    .step-card:hover { transform: translateY(-6px); box-shadow: 0 20px 50px rgba(20,20,30,.08); }
+    .step-card.dark { background: var(--black-light); color: var(--white); border-color: var(--black-light); }
+    .step-card.dark .step-desc { color: var(--gray-300); }
+    .step-number { font-family: var(--font-display); font-size: 14px; color: var(--red); font-weight: 600; margin-bottom: 18px; }
+    .step-card.dark .step-number { color: #ff6b64; }
+    .step-title { font-size: 20px; font-weight: 700; margin-bottom: 10px; letter-spacing: -0.01em; }
+    .step-desc { font-size: 14.5px; line-height: 1.55; color: var(--gray-500); margin: 0; }
+
+    .features-section { background: var(--white); border-top: 1px solid var(--gray-100); }
+    .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .feature-card { background: var(--cream); border: 1px solid #efece5; border-radius: 24px; padding: 36px; transition: all 0.5s cubic-bezier(.16,1,.3,1); position: relative; overflow: hidden; cursor: pointer; }
+    .feature-card::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 0; background: linear-gradient(180deg, transparent, rgba(232,49,42,.06)); transition: height 0.5s cubic-bezier(.16,1,.3,1); }
+    .feature-card:hover::after { height: 100%; }
+    .feature-card:hover { transform: translateY(-6px) scale(1.01); box-shadow: 0 24px 50px rgba(20,20,30,.1); }
+    .feature-icon { width: 50px; height: 50px; border-radius: 14px; background: var(--red-light); display: flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 20px; transition: transform 0.5s cubic-bezier(.16,1,.3,1); }
+    .feature-card:hover .feature-icon { transform: scale(1.1) rotate(-5deg); }
+    .feature-title { font-size: 20px; font-weight: 700; margin-bottom: 10px; letter-spacing: -0.01em; }
+    .feature-desc { font-size: 14.5px; line-height: 1.55; color: var(--gray-500); margin: 0; }
+
+    .demo-section { position: relative; background: var(--black); color: var(--white); overflow: hidden; }
+    .demo-section .section-label { color: #ff6b64; }
+    .demo-section .section-subtitle { color: var(--gray-300); }
+    .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+    .demo-phone { display: flex; justify-content: center; }
+    .demo-phone-inner { width: 280px; border-radius: 34px; background: #0a0a0c; border: 1px solid #2a2a30; padding: 14px; box-shadow: 0 40px 80px rgba(0,0,0,.5); }
+    .demo-phone-screen { border-radius: 28px; background: #0a0a0c; overflow: hidden; display: flex; flex-direction: column; height: 520px; }
+    .demo-chat { flex: 1; overflow: hidden; padding: 16px 12px; display: flex; flex-direction: column; gap: 8px; justify-content: flex-end; }
+    .demo-msg { max-width: 82%; padding: 9px 13px; border-radius: 18px; font-size: 13.5px; line-height: 1.35; opacity: 0; transform: translateY(10px) scale(0.96); transition: all 0.5s cubic-bezier(.16,1,.3,1); }
+    .demo-msg.in { align-self: flex-end; background: var(--blue); color: var(--white); }
+    .demo-msg.ai { align-self: flex-start; background: #26262c; color: #f0f0f2; }
+    .demo-msg.show { opacity: 1; transform: translateY(0) scale(1); }
+    .demo-typing { align-self: flex-start; background: #26262c; padding: 11px 15px; border-radius: 19px; display: none; gap: 4px; align-items: center; }
+    .demo-typing span { width: 7px; height: 7px; border-radius: 50%; background: #77777f; animation: typing-bounce 1.3s infinite; }
+    .demo-typing span:nth-child(2) { animation-delay: 0.18s; }
+    .demo-typing span:nth-child(3) { animation-delay: 0.36s; }
+    .demo-points { display: flex; flex-direction: column; gap: 20px; }
+    .demo-point { display: flex; gap: 14px; align-items: flex-start; }
+    .demo-point .arrow { color: #ff6b64; font-size: 20px; line-height: 1; flex-shrink: 0; margin-top: 2px; }
+    .demo-point .text .title { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+    .demo-point .text .desc { font-size: 14px; color: var(--gray-300); }
+
+    .agency-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+    .agency-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 36px; }
+    .agency-stat .value { font-size: 36px; font-weight: 800; letter-spacing: -0.02em; color: var(--black); line-height: 1; margin-bottom: 6px; }
+    .agency-stat .value.red { color: var(--red); }
+    .agency-stat .label { font-size: 14px; color: var(--gray-500); }
+    .agency-dashboard { background: var(--white); border: 1px solid var(--gray-100); border-radius: 24px; padding: 24px; box-shadow: 0 24px 60px rgba(20,20,30,.08); }
+    .agency-dashboard-header { font-family: var(--font-display); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gray-400); margin-bottom: 16px; }
+    .agency-client { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-radius: 14px; background: var(--cream); border: 1px solid #efece5; margin-bottom: 11px; transition: all 0.3s ease; }
+    .agency-client:hover { transform: translateX(4px); border-color: var(--red); }
+    .agency-client.dark { background: var(--black-light); color: var(--white); border-color: var(--black-light); }
+    .agency-client .left { display: flex; align-items: center; gap: 12px; }
+    .agency-client .status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px rgba(31,175,107,.15); }
+    .agency-client .status-dot.red { background: var(--red); box-shadow: 0 0 0 3px rgba(232,49,42,.15); }
+    .agency-client .name { font-weight: 700; font-size: 14px; }
+    .agency-client .right { font-family: var(--font-display); font-size: 12px; color: var(--gray-500); }
+    .agency-client.dark .right { color: var(--gray-300); }
+
+    .pricing-section { background: var(--white); border-top: 1px solid var(--gray-100); }
+    .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; align-items: stretch; }
+    .pricing-card { background: var(--cream); border: 1px solid #efece5; border-radius: 24px; padding: 38px; display: flex; flex-direction: column; transition: all 0.5s cubic-bezier(.16,1,.3,1); position: relative; overflow: hidden; }
+    .pricing-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 0; background: linear-gradient(180deg, rgba(232,49,42,.08), transparent); transition: height 0.5s ease; }
+    .pricing-card:hover::before { height: 120px; }
+    .pricing-card:hover { transform: translateY(-8px); box-shadow: 0 30px 60px rgba(20,20,30,.1); }
+    .pricing-card.popular { background: var(--black-light); color: var(--white); border-color: var(--black-light); transform: translateY(-12px); box-shadow: 0 30px 60px rgba(20,20,30,.24); }
+    .pricing-card.popular::before { background: linear-gradient(180deg, rgba(232,49,42,.15), transparent); }
+    .pricing-badge { position: absolute; top: 20px; right: 20px; font-family: var(--font-display); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; background: var(--red); color: var(--white); padding: 5px 12px; border-radius: 999px; }
+    .pricing-name { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+    .pricing-desc { font-size: 14px; color: var(--gray-400); margin-bottom: 24px; }
+    .pricing-card.popular .pricing-desc { color: var(--gray-300); }
+    .pricing-price { display: flex; align-items: baseline; gap: 4px; margin-bottom: 28px; }
+    .pricing-price .amount { font-size: 48px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+    .pricing-price .period { font-size: 15px; color: var(--gray-400); }
+    .pricing-card.popular .pricing-price .period { color: var(--gray-300); }
+    .pricing-features { display: flex; flex-direction: column; gap: 12px; font-size: 14.5px; margin-bottom: 32px; flex: 1; }
+    .pricing-features span { display: flex; align-items: center; gap: 10px; }
+    .pricing-features span .check { color: var(--green); font-size: 12px; }
+    .pricing-card.popular .pricing-features span .check { color: #ff8078; }
+    .pricing-btn { text-align: center; background: var(--white); border: 1px solid var(--gray-200); color: var(--black); font-weight: 600; font-size: 15px; padding: 14px; border-radius: 999px; text-decoration: none; transition: all 0.3s ease; cursor: pointer; font-family: var(--font-main); }
+    .pricing-btn:hover { border-color: var(--red); background: var(--red-light); }
+    .pricing-card.popular .pricing-btn { background: var(--red); color: var(--white); border-color: var(--red); box-shadow: 0 10px 24px rgba(232,49,42,.4); }
+    .pricing-card.popular .pricing-btn:hover { background: var(--red-dark); transform: translateY(-2px); }
+
+    .testimonials-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+    .testimonial-card { background: var(--white); border: 1px solid var(--gray-100); border-radius: 24px; padding: 32px; box-shadow: 0 10px 30px rgba(20,20,30,.04); transition: all 0.5s cubic-bezier(.16,1,.3,1); }
+    .testimonial-card:hover { transform: translateY(-6px); box-shadow: 0 20px 50px rgba(20,20,30,.08); }
+    .testimonial-stars { color: var(--red); font-size: 15px; letter-spacing: 2px; margin-bottom: 18px; }
+    .testimonial-quote { font-size: 16px; line-height: 1.6; color: var(--gray-700); margin: 0 0 24px; font-weight: 450; }
+    .testimonial-author { display: flex; align-items: center; gap: 12px; }
+    .testimonial-avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--red-light); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; color: var(--red); }
+    .testimonial-name { font-weight: 700; font-size: 14px; }
+    .testimonial-company { font-size: 12.5px; color: var(--gray-400); }
+
+    .faq-section { background: var(--white); border-top: 1px solid var(--gray-100); }
+    .faq-section .section { max-width: 820px; }
+    .faq-list { display: flex; flex-direction: column; gap: 12px; }
+    .faq-item { background: var(--cream); border: 1px solid #efece5; border-radius: 18px; overflow: hidden; transition: all 0.3s ease; }
+    .faq-item.active { border-color: var(--red); }
+    .faq-question { width: 100%; text-align: left; background: none; border: none; padding: 22px 24px; font-size: 17px; font-weight: 700; color: var(--black); cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-family: inherit; transition: color 0.3s ease; }
+    .faq-question:hover { color: var(--red); }
+    .faq-icon { color: var(--red); font-size: 22px; transition: transform 0.3s ease; font-weight: 300; }
+    .faq-item.active .faq-icon { transform: rotate(45deg); }
+    .faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.4s cubic-bezier(.16,1,.3,1); }
+    .faq-answer p { padding: 0 24px 22px; margin: 0; font-size: 15.5px; line-height: 1.6; color: var(--gray-500); }
+
+    .cta-section { position: relative; overflow: hidden; background: var(--black); color: var(--white); }
+    .cta-section .section { position: relative; z-index: 2; max-width: 820px; text-align: center; }
+    .cta-title { font-family: var(--font-display); font-size: clamp(38px, 5.5vw, 70px); line-height: 1.03; letter-spacing: -0.035em; font-weight: 700; margin: 0 0 24px; }
+    .cta-desc { font-size: 19px; line-height: 1.55; color: var(--gray-300); margin: 0 auto 40px; max-width: 520px; }
+    .cta-buttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+    .cta-btn-outline { background: rgba(255,255,255,.08); color: var(--white); font-weight: 600; font-size: 16px; padding: 16px 28px; border-radius: 999px; text-decoration: none; border: 1px solid rgba(255,255,255,.16); transition: all 0.3s ease; cursor: pointer; font-family: var(--font-main); }
+    .cta-btn-outline:hover { background: rgba(255,255,255,.15); border-color: rgba(255,255,255,.3); transform: translateY(-2px); }
+
+    .footer { background: #0f0f13; color: var(--gray-400); padding: 56px clamp(20px, 5vw, 56px) 40px; }
+    .footer-inner { max-width: 1200px; margin: 0 auto; }
+    .footer-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px; border-bottom: 1px solid #23232a; padding-bottom: 32px; margin-bottom: 24px; }
+    .footer-logo { display: flex; align-items: center; gap: 11px; }
+    .footer-logo img { width: 28px; height: auto; }
+    .footer-logo span { font-weight: 700; font-size: 18px; color: var(--white); }
+    .footer-logo span .red { color: var(--red); }
+    .footer-links { display: flex; gap: 28px; font-size: 14px; }
+    .footer-links a { color: var(--gray-400); text-decoration: none; transition: color 0.3s ease; cursor: pointer; }
+    .footer-links a:hover { color: var(--white); }
+    .footer-bottom { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-size: 13px; }
+    .footer-bottom span { font-family: var(--font-display); }
+
+    @media (max-width: 1024px) {
+      .hero-content { grid-template-columns: 1fr; gap: 50px; }
+      .hero-right { order: -1; }
+      .steps-grid { grid-template-columns: repeat(2, 1fr); }
+      .features-grid { grid-template-columns: repeat(2, 1fr); }
+      .demo-grid { grid-template-columns: 1fr; gap: 40px; }
+      .agency-grid { grid-template-columns: 1fr; gap: 40px; }
+      .pricing-grid { grid-template-columns: 1fr; max-width: 500px; margin: 0 auto; }
+      .testimonials-grid { grid-template-columns: repeat(2, 1fr); }
+      .nav-links { display: none; }
+      .nav-mobile-toggle { display: flex; }
+    }
+    @media (max-width: 768px) {
+      .hero-title { font-size: clamp(36px, 10vw, 56px); }
+      .steps-grid { grid-template-columns: 1fr; }
+      .features-grid { grid-template-columns: 1fr; }
+      .testimonials-grid { grid-template-columns: 1fr; }
+      .phone-mockup { width: 260px; height: 540px; }
+      .float-chip { display: none; }
+      .agency-stats { grid-template-columns: 1fr 1fr; }
+      .cta-title { font-size: clamp(32px, 8vw, 48px); }
+    }
+    @media (max-width: 480px) {
+      .hero-cta-group { flex-direction: column; }
+      .hero-cta-group .btn-primary, .hero-cta-group .btn-secondary { width: 100%; justify-content: center; }
+      .agency-stats { grid-template-columns: 1fr; }
+    }
+
+    .reveal { opacity: 0; transform: translateY(40px); }
+    .reveal.active { opacity: 1; transform: translateY(0); transition: all 0.9s cubic-bezier(.16,1,.3,1); }
+    .reveal-delay-1 { transition-delay: 0.1s; }
+    .reveal-delay-2 { transition-delay: 0.2s; }
+    .reveal-delay-3 { transition-delay: 0.3s; }
+    .reveal-delay-4 { transition-delay: 0.4s; }
+
+    .parallax-layer { will-change: transform; }
+    .tilt-card { transform-style: preserve-3d; transition: transform 0.3s ease; }
+    .glow-red { box-shadow: 0 0 60px rgba(232,49,42,.15); }
+    .gradient-text { background: linear-gradient(135deg, var(--red), #ff6b6b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+    #hero-3d-scene { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+    .scroll-progress { position: fixed; top: 0; left: 0; height: 3px; background: linear-gradient(90deg, var(--red), #ff6b6b); z-index: 1001; transform-origin: left; transform: scaleX(0); }
+
+    /* Services Page */
+    .services-hero { position: relative; min-height: 70vh; display: flex; align-items: center; background: var(--black); color: var(--white); overflow: hidden; padding: 120px clamp(20px, 5vw, 56px) 80px; }
+    .services-hero-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; }
+    .services-hero-content { position: relative; z-index: 2; max-width: 1200px; margin: 0 auto; width: 100%; }
+    .services-hero-title { font-family: var(--font-display); font-size: clamp(40px, 6vw, 72px); line-height: 1.05; letter-spacing: -0.03em; font-weight: 700; margin-bottom: 20px; }
+    .services-hero-desc { font-size: 18px; line-height: 1.6; color: var(--gray-300); max-width: 600px; }
+    .service-detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 40px; }
+    .service-detail-card { background: var(--white); border: 1px solid var(--gray-100); border-radius: 24px; padding: 40px; transition: all 0.5s cubic-bezier(.16,1,.3,1); position: relative; overflow: hidden; }
+    .service-detail-card:hover { transform: translateY(-8px); box-shadow: 0 24px 50px rgba(20,20,30,.1); border-color: var(--red); }
+    .service-detail-card .icon-wrap { width: 60px; height: 60px; border-radius: 16px; background: var(--red-light); display: flex; align-items: center; justify-content: center; font-size: 26px; margin-bottom: 24px; }
+    .service-detail-card h3 { font-size: 22px; font-weight: 700; margin-bottom: 12px; }
+    .service-detail-card p { font-size: 15px; line-height: 1.6; color: var(--gray-500); margin-bottom: 20px; }
+    .service-detail-card ul { list-style: none; padding: 0; margin: 0; }
+    .service-detail-card ul li { font-size: 14px; color: var(--gray-500); padding: 6px 0; display: flex; align-items: center; gap: 8px; }
+    .service-detail-card ul li::before { content: '✓'; color: var(--green); font-weight: 700; }
+
+    /* Industries Page */
+    .industries-hero { position: relative; min-height: 60vh; display: flex; align-items: center; background: var(--cream); overflow: hidden; padding: 120px clamp(20px, 5vw, 56px) 80px; }
+    .industries-hero-content { max-width: 1200px; margin: 0 auto; width: 100%; text-align: center; }
+    .industries-hero-title { font-family: var(--font-display); font-size: clamp(40px, 6vw, 64px); line-height: 1.05; letter-spacing: -0.03em; font-weight: 700; margin-bottom: 20px; }
+    .industries-hero-desc { font-size: 18px; line-height: 1.6; color: var(--gray-500); max-width: 700px; margin: 0 auto; }
+    .industries-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .industry-card { background: var(--white); border: 1px solid var(--gray-100); border-radius: 24px; padding: 36px; text-align: center; transition: all 0.5s cubic-bezier(.16,1,.3,1); position: relative; overflow: hidden; }
+    .industry-card::before { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: var(--red); transform: scaleX(0); transition: transform 0.5s cubic-bezier(.16,1,.3,1); }
+    .industry-card:hover::before { transform: scaleX(1); }
+    .industry-card:hover { transform: translateY(-8px); box-shadow: 0 24px 50px rgba(20,20,30,.1); }
+    .industry-icon { width: 64px; height: 64px; border-radius: 20px; background: var(--red-light); display: flex; align-items: center; justify-content: center; font-size: 28px; margin: 0 auto 20px; }
+    .industry-card h3 { font-size: 20px; font-weight: 700; margin-bottom: 10px; }
+    .industry-card p { font-size: 14.5px; line-height: 1.55; color: var(--gray-500); }
+
+    /* About Page */
+    .about-hero { position: relative; min-height: 60vh; display: flex; align-items: center; background: var(--cream); overflow: hidden; padding: 120px clamp(20px, 5vw, 56px) 80px; }
+    .about-hero-content { max-width: 1200px; margin: 0 auto; width: 100%; }
+    .about-hero-title { font-family: var(--font-display); font-size: clamp(40px, 6vw, 64px); line-height: 1.05; letter-spacing: -0.03em; font-weight: 700; margin-bottom: 20px; }
+    .about-hero-desc { font-size: 18px; line-height: 1.6; color: var(--gray-500); max-width: 700px; }
+    .about-values { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-top: 60px; }
+    .about-value { text-align: center; padding: 40px 24px; }
+    .about-value .icon { width: 64px; height: 64px; border-radius: 20px; background: var(--red-light); display: flex; align-items: center; justify-content: center; font-size: 28px; margin: 0 auto 20px; }
+    .about-value h3 { font-size: 20px; font-weight: 700; margin-bottom: 10px; }
+    .about-value p { font-size: 14.5px; line-height: 1.55; color: var(--gray-500); }
+    .about-team { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .team-card { background: var(--white); border: 1px solid var(--gray-100); border-radius: 20px; padding: 28px; text-align: center; transition: all 0.5s cubic-bezier(.16,1,.3,1); }
+    .team-card:hover { transform: translateY(-6px); box-shadow: 0 20px 50px rgba(20,20,30,.08); }
+    .team-avatar { width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, var(--red-light), var(--cream-dark)); display: flex; align-items: center; justify-content: center; font-size: 32px; margin: 0 auto 16px; }
+    .team-name { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+    .team-role { font-size: 13px; color: var(--gray-400); }
+
+    /* Contact Page */
+    .contact-hero { position: relative; min-height: 50vh; display: flex; align-items: center; background: var(--black); color: var(--white); overflow: hidden; padding: 120px clamp(20px, 5vw, 56px) 60px; }
+    .contact-hero-content { max-width: 1200px; margin: 0 auto; width: 100%; text-align: center; }
+    .contact-hero-title { font-family: var(--font-display); font-size: clamp(40px, 6vw, 64px); line-height: 1.05; letter-spacing: -0.03em; font-weight: 700; margin-bottom: 16px; }
+    .contact-hero-desc { font-size: 18px; line-height: 1.6; color: var(--gray-300); max-width: 600px; margin: 0 auto; }
+    .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: start; }
+    .contact-form { background: var(--white); border: 1px solid var(--gray-100); border-radius: 24px; padding: 40px; }
+    .form-group { margin-bottom: 24px; }
+    .form-group label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--black); }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%; padding: 14px 16px; border: 1px solid var(--gray-200); border-radius: 12px;
+      font-family: var(--font-main); font-size: 15px; color: var(--black);
+      transition: all 0.3s ease; background: var(--white);
+    }
+    .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+      outline: none; border-color: var(--red); box-shadow: 0 0 0 3px rgba(232,49,42,.1);
+    }
+    .form-group textarea { resize: vertical; min-height: 120px; }
+    .contact-info { display: flex; flex-direction: column; gap: 28px; }
+    .contact-info-item { display: flex; gap: 16px; align-items: flex-start; }
+    .contact-info-item .icon { width: 48px; height: 48px; border-radius: 14px; background: var(--red-light); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+    .contact-info-item .text h4 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .contact-info-item .text p { font-size: 14px; color: var(--gray-500); margin: 0; }
+
+    /* Pricing detailed page */
+    .pricing-compare { width: 100%; border-collapse: collapse; margin-top: 40px; }
+    .pricing-compare th { text-align: left; padding: 16px 20px; font-size: 14px; font-weight: 600; color: var(--gray-400); border-bottom: 1px solid var(--gray-100); }
+    .pricing-compare td { padding: 16px 20px; font-size: 15px; border-bottom: 1px solid var(--gray-100); }
+    .pricing-compare tr:hover td { background: var(--cream); }
+    .pricing-compare .check { color: var(--green); }
+    .pricing-compare .cross { color: var(--gray-300); }
+    .pricing-compare .highlight { background: var(--red-light); font-weight: 600; }
+  </style>
+<base target="_blank">
+</head>
+<body>
+
+<!-- Scroll Progress Bar -->
+<div class="scroll-progress" id="scrollProgress"></div>
+
+<!-- Particle Canvas -->
+<canvas id="particle-canvas"></canvas>
+
+<!-- ========== NAVIGATION ========== -->
+<nav class="nav" id="mainNav">
+  <a class="nav-logo" onclick="goToPage('home')">
+    <img src="lazusai-logo.png" alt="LazusAI" id="navLogoImg">
+    <span>Lazus<span class="red">AI</span></span>
+  </a>
+  <div class="nav-links" id="navLinks">
+    <a onclick="goToPage('home')" data-page="home">Home</a>
+    <a onclick="goToPage('services')" data-page="services">Services</a>
+    <a onclick="goToPage('industries')" data-page="industries">Industries</a>
+    <a onclick="goToPage('pricing')" data-page="pricing">Pricing</a>
+    <a onclick="goToPage('about')" data-page="about">About</a>
+    <a onclick="goToPage('contact')" data-page="contact">Contact</a>
+  </div>
+  <button class="nav-cta" onclick="goToPage('contact')">Book a demo</button>
+  <button class="nav-mobile-toggle" id="mobileToggle" onclick="toggleMobileMenu()">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<!-- Mobile Menu -->
+<div class="nav-mobile-menu" id="mobileMenu">
+  <a onclick="goToPage('home'); toggleMobileMenu()">Home</a>
+  <a onclick="goToPage('services'); toggleMobileMenu()">Services</a>
+  <a onclick="goToPage('industries'); toggleMobileMenu()">Industries</a>
+  <a onclick="goToPage('pricing'); toggleMobileMenu()">Pricing</a>
+  <a onclick="goToPage('about'); toggleMobileMenu()">About</a>
+  <a onclick="goToPage('contact'); toggleMobileMenu()">Contact</a>
+  <button class="nav-cta" onclick="goToPage('contact'); toggleMobileMenu()">Book a demo</button>
+</div>
+
+<!-- ========== HOME PAGE ========== -->
+<div class="page active" id="page-home">
+
+  <!-- HERO -->
+  <section class="hero" id="hero">
+    <canvas id="hero-3d-scene"></canvas>
+    <div class="hero-content">
+      <div class="hero-left">
+        <div class="hero-badge reveal">
+          <span class="dot"></span>AI receptionist for iMessage
+        </div>
+        <h1 class="hero-title">
+          <span class="line"><span>Never miss</span></span>
+          <span class="line"><span>another</span></span>
+          <span class="line"><span class="red">customer.</span></span>
+        </h1>
+        <p class="hero-desc reveal">LazusAI answers every text, books the job, and captures the lead — 24/7, in your business's own voice. No new app. It is just iMessage.</p>
+        <div class="hero-cta-group reveal">
+          <button class="btn-primary" onclick="goToPage('contact')">Start free</button>
+          <button class="btn-secondary" onclick="scrollToSection('demo')">
+            <span class="play-icon">▶</span>See it work
+          </button>
+        </div>
+        <div class="hero-stats reveal">
+          <span class="hero-stat"><span class="check">✓</span>Answers in ~3 seconds</span>
+          <span class="hero-stat"><span class="check">✓</span>Books & captures leads</span>
+          <span class="hero-stat"><span class="check">✓</span>Runs 24/7</span>
+        </div>
+      </div>
+      <div class="hero-right">
+        <div class="phone-3d-container" id="phone3d">
+          <div class="float-chip chip-1" id="chip1">
+            <span class="chip-icon" style="background:#e6f7ee; color:var(--green);">✓</span>
+            <div class="chip-text"><div class="chip-title">Lead captured</div><div class="chip-sub">Maria · water heater</div></div>
+          </div>
+          <div class="float-chip dark chip-2" id="chip2">
+            <span class="chip-icon" style="background:rgba(255,255,255,.12); color:var(--white);">📅</span>
+            <div class="chip-text"><div class="chip-title">Booked · Thu 2–4pm</div><div class="chip-sub">Added to calendar</div></div>
+          </div>
+          <div class="float-chip chip-3" id="chip3">
+            <span style="font-family:var(--font-display); font-weight:600; font-size:12px; color:var(--red);">24/7</span>
+            <span style="font-size:12px; color:var(--gray-500); font-weight:500;">always on</span>
+          </div>
+          <div class="phone-mockup">
+            <div class="phone-screen">
+              <div class="phone-notch"></div>
+              <div class="phone-status">
+                <span>9:41</span>
+                <span style="display:flex; gap:6px; align-items:center;">
+                  <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#16161c"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#16161c"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#16161c"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#16161c"/></svg>
+                  <svg width="22" height="11" viewBox="0 0 24 12"><rect x="0.5" y="0.5" width="20" height="11" rx="3" fill="none" stroke="#16161c" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#16161c"/><rect x="21.5" y="4" width="2" height="4" rx="1" fill="#16161c" opacity=".4"/></svg>
+                </span>
+              </div>
+              <div class="phone-header">
+                <div class="phone-avatar"><img src="lazusai-logo.png" alt="LazusAI" id="phoneAvatarImg"></div>
+                <div class="phone-header-name">Bright Ave Plumbing</div>
+                <div class="phone-header-sub">iMessage</div>
+              </div>
+              <div class="phone-chat" id="heroChat">
+                <div class="msg in" data-msg="1">Hi, do you do emergency water heater repair?</div>
+                <div class="msg ai" data-msg="2">Yes! We handle emergency water heaters 24/7. Are you near Bright Ave?</div>
+                <div class="msg in" data-msg="3">Yes, downtown. How soon can someone come?</div>
+                <div class="msg ai" data-msg="4">I can get a tech out today, 2–4pm. Want me to book it? 🔧</div>
+                <div class="msg in" data-msg="5">Yes please!</div>
+                <div class="msg ai" data-msg="6">Booked ✅ Thursday 2–4pm. I will text you a reminder. Anything else?</div>
+                <div class="msg-typing" id="heroTyping"><span></span><span></span><span></span></div>
+              </div>
+              <div class="phone-input">
+                <div class="phone-input-bar">iMessage</div>
+                <div class="phone-input-send">↑</div>
+              </div>
+              <div class="phone-home-bar"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="scroll-hint">
+      Scroll
+      <div class="line"></div>
+    </div>
+  </section>
+
+  <!-- MARQUEE -->
+  <section class="marquee-section">
+    <div class="marquee-label">Trusted by local service businesses</div>
+    <div class="marquee-track">
+      <div class="marquee-content">
+        <span>Bright Ave Plumbing</span><span>NorthGate HVAC</span><span>Lumen Dental</span><span>Apex Roofing</span><span>Verde Landscaping</span><span>PrimeCut Barbers</span>
+        <span>Bright Ave Plumbing</span><span>NorthGate HVAC</span><span>Lumen Dental</span><span>Apex Roofing</span><span>Verde Landscaping</span><span>PrimeCut Barbers</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="section" id="how">
+    <div class="section-header">
+      <div class="section-label reveal">How it works</div>
+      <h2 class="section-title reveal">From missed call to booked job — automatically.</h2>
+    </div>
+    <div class="steps-grid">
+      <div class="step-card reveal">
+        <div class="step-number">01</div>
+        <h3 class="step-title">Customer texts you</h3>
+        <p class="step-desc">A lead messages your business number over iMessage — day or night.</p>
+      </div>
+      <div class="step-card reveal reveal-delay-1">
+        <div class="step-number">02</div>
+        <h3 class="step-title">AI replies instantly</h3>
+        <p class="step-desc">LazusAI understands the request and answers in your business's voice.</p>
+      </div>
+      <div class="step-card reveal reveal-delay-2">
+        <div class="step-number">03</div>
+        <h3 class="step-title">Books & captures</h3>
+        <p class="step-desc">It schedules the job and saves the qualified lead automatically.</p>
+      </div>
+      <div class="step-card dark reveal reveal-delay-3">
+        <div class="step-number">04</div>
+        <h3 class="step-title">You get notified</h3>
+        <p class="step-desc">An instant owner alert lands in Telegram with the full context.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features-section" id="features">
+    <div class="section">
+      <div class="section-header" style="text-align:left; margin-bottom:60px;">
+        <div class="section-label reveal">Capabilities</div>
+        <h2 class="section-title reveal" style="margin:0 0 18px;">Everything a great front desk does.<br>Nothing it forgets.</h2>
+        <p class="section-subtitle reveal" style="margin:0;">Purpose-built for local service businesses — and the agencies that run them.</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card reveal">
+          <div class="feature-icon">⚡</div>
+          <h3 class="feature-title">Instant 24/7 replies</h3>
+          <p class="feature-desc">Answers in seconds, every hour — so a slow night never costs you the job.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-1">
+          <div class="feature-icon">📅</div>
+          <h3 class="feature-title">Books appointments</h3>
+          <p class="feature-desc">Offers real time slots and confirms the booking right inside the chat.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-2">
+          <div class="feature-icon">🎯</div>
+          <h3 class="feature-title">Captures & qualifies leads</h3>
+          <p class="feature-desc">Every conversation becomes a structured, qualified lead — nothing slips.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">🗣️</div>
+          <h3 class="feature-title">Sounds exactly like you</h3>
+          <p class="feature-desc">A custom voice and personality per business — trained on your knowledge.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-1">
+          <div class="feature-icon">🎙️</div>
+          <h3 class="feature-title">Understands voice notes</h3>
+          <p class="feature-desc">Customers can send a voice memo — it is transcribed and answered instantly.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-2">
+          <div class="feature-icon">🔒</div>
+          <h3 class="feature-title">Private & isolated</h3>
+          <p class="feature-desc">Each business gets its own knowledge base and leads. Data never crosses.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LIVE DEMO -->
+  <section class="demo-section" id="demo">
+    <div class="section">
+      <div class="demo-grid">
+        <div class="reveal">
+          <div class="section-label">Live demo</div>
+          <h2 class="section-title" style="margin:0 0 20px;">Watch it turn a text into a booking.</h2>
+          <p class="section-subtitle" style="margin:0 0 30px; text-align:left;">This is a real conversation flow — the customer texts, LazusAI qualifies, answers, and closes the booking without anyone lifting a finger.</p>
+          <div class="demo-points">
+            <div class="demo-point">
+              <span class="arrow">›</span>
+              <div class="text"><div class="title">Understands intent</div><div class="desc">Knows "emergency" means priority scheduling.</div></div>
+            </div>
+            <div class="demo-point">
+              <span class="arrow">›</span>
+              <div class="text"><div class="title">Never sleeps</div><div class="desc">2am inquiries get the same fast, on-brand reply.</div></div>
+            </div>
+            <div class="demo-point">
+              <span class="arrow">›</span>
+              <div class="text"><div class="title">Closes the loop</div><div class="desc">Confirms, reminds, and logs the lead — done.</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="demo-phone reveal reveal-delay-1">
+          <div class="demo-phone-inner">
+            <div class="demo-phone-screen">
+              <div style="display:flex; align-items:center; gap:10px; padding:12px 12px 14px; border-bottom:1px solid #23232a;">
+                <div style="width:38px; height:38px; border-radius:50%; background:linear-gradient(150deg,#fdecea,#fbd7d3); display:flex; align-items:center; justify-content:center;">
+                  <img src="lazusai-logo.png" width="22" height="20" alt="LazusAI" style="display:block;" id="demoPhoneImg">
+                </div>
+                <div><div style="font-size:14px; font-weight:700;">NorthGate HVAC</div><div style="font-size:11px; color:#7a7a82;">via LazusAI · online</div></div>
+              </div>
+              <div class="demo-chat" id="demoChat">
+                <div class="demo-typing" id="demoTyping"><span></span><span></span><span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AGENCIES -->
+  <section class="section" id="agencies">
+    <div class="agency-grid">
+      <div class="reveal">
+        <div class="section-label">For agencies & operators</div>
+        <h2 class="section-title" style="margin:0 0 20px;">Run a receptionist for every client — from one place.</h2>
+        <p class="section-subtitle" style="margin:0 0 30px; text-align:left;">Multi-tenant by design. Each client gets isolated config, their own knowledge base, their own leads, and their own workflow — all keyed and kept apart.</p>
+        <div class="agency-stats">
+          <div class="agency-stat"><div class="value">∞</div><div class="label">Clients per operator</div></div>
+          <div class="agency-stat"><div class="value red">100%</div><div class="label">Data isolation per tenant</div></div>
+          <div class="agency-stat"><div class="value">1</div><div class="label">Dashboard to run it all</div></div>
+          <div class="agency-stat"><div class="value red">$0</div><div class="label">External AI service fees</div></div>
+        </div>
+      </div>
+      <div class="reveal reveal-delay-1">
+        <div class="agency-dashboard">
+          <div class="agency-dashboard-header">Operator dashboard</div>
+          <div class="agency-client"><div class="left"><span class="status-dot"></span><span class="name">Bright Ave Plumbing</span></div><span class="right">18 leads</span></div>
+          <div class="agency-client"><div class="left"><span class="status-dot"></span><span class="name">NorthGate HVAC</span></div><span class="right">31 leads</span></div>
+          <div class="agency-client"><div class="left"><span class="status-dot"></span><span class="name">Lumen Dental</span></div><span class="right">24 leads</span></div>
+          <div class="agency-client dark"><div class="left"><span class="status-dot red"></span><span class="name">Apex Roofing</span></div><span class="right">escalation</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="pricing-section" id="pricing">
+    <div class="section">
+      <div class="section-header">
+        <div class="section-label reveal">Pricing</div>
+        <h2 class="section-title reveal">Simple pricing. No per-message surprises.</h2>
+        <p class="section-subtitle reveal">Runs on your own stack — so there are no external AI fees to mark up.</p>
+      </div>
+      <div class="pricing-grid">
+        <div class="pricing-card reveal">
+          <div class="pricing-name">Starter</div>
+          <div class="pricing-desc">For a single location.</div>
+          <div class="pricing-price"><span class="amount">$149</span><span class="period">/mo</span></div>
+          <div class="pricing-features">
+            <span><span class="check">✓</span> 1 business</span>
+            <span><span class="check">✓</span> 24/7 AI replies</span>
+            <span><span class="check">✓</span> Booking & lead capture</span>
+            <span><span class="check">✓</span> Owner alerts</span>
+          </div>
+          <button class="pricing-btn" onclick="goToPage('contact')">Start free</button>
+        </div>
+        <div class="pricing-card popular reveal reveal-delay-1">
+          <div class="pricing-badge">Popular</div>
+          <div class="pricing-name">Pro</div>
+          <div class="pricing-desc">For growing businesses.</div>
+          <div class="pricing-price"><span class="amount">$349</span><span class="period">/mo</span></div>
+          <div class="pricing-features">
+            <span style="color:#ff8078;"><span class="check">✓</span> Everything in Starter</span>
+            <span><span class="check">✓</span> Custom voice & personality</span>
+            <span><span class="check">✓</span> Voice-note transcription</span>
+            <span><span class="check">✓</span> Knowledge base training</span>
+            <span><span class="check">✓</span> Priority scheduling logic</span>
+          </div>
+          <button class="pricing-btn" onclick="goToPage('contact')">Book a demo</button>
+        </div>
+        <div class="pricing-card reveal reveal-delay-2">
+          <div class="pricing-name">Agency</div>
+          <div class="pricing-desc">Run many clients.</div>
+          <div class="pricing-price"><span class="amount">Custom</span></div>
+          <div class="pricing-features">
+            <span><span class="check">✓</span> Unlimited tenants</span>
+            <span><span class="check">✓</span> Operator dashboard</span>
+            <span><span class="check">✓</span> Per-client isolation</span>
+            <span><span class="check">✓</span> White-glove onboarding</span>
+          </div>
+          <button class="pricing-btn" onclick="goToPage('contact')">Talk to us</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TESTIMONIALS -->
+  <section class="section">
+    <div class="section-header" style="margin-bottom:56px;">
+      <h2 class="section-title reveal">Owners stopped losing after-hours jobs.</h2>
+    </div>
+    <div class="testimonials-grid">
+      <div class="testimonial-card reveal">
+        <div class="testimonial-stars">★★★★★</div>
+        <p class="testimonial-quote">"It booked three emergency calls before I woke up. It genuinely sounds like my office manager."</p>
+        <div class="testimonial-author">
+          <span class="testimonial-avatar">DM</span>
+          <div><div class="testimonial-name">Dave Morales</div><div class="testimonial-company">Bright Ave Plumbing</div></div>
+        </div>
+      </div>
+      <div class="testimonial-card reveal reveal-delay-1">
+        <div class="testimonial-stars">★★★★★</div>
+        <p class="testimonial-quote">"We run 12 clients on it. Every one has its own voice and none of the data ever mixes. Set-and-forget."</p>
+        <div class="testimonial-author">
+          <span class="testimonial-avatar">SK</span>
+          <div><div class="testimonial-name">Sara Kline</div><div class="testimonial-company">Booki Studios (agency)</div></div>
+        </div>
+      </div>
+      <div class="testimonial-card reveal reveal-delay-2">
+        <div class="testimonial-stars">★★★★★</div>
+        <p class="testimonial-quote">"Customers cannot tell it is AI. It even handles the voice notes people send at midnight."</p>
+        <div class="testimonial-author">
+          <span class="testimonial-avatar">RT</span>
+          <div><div class="testimonial-name">Rita Tran</div><div class="testimonial-company">NorthGate HVAC</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="faq-section" id="faq">
+    <div class="section">
+      <div class="section-header" style="margin-bottom:52px;">
+        <div class="section-label reveal">FAQ</div>
+        <h2 class="section-title reveal">Questions, answered.</h2>
+      </div>
+      <div class="faq-list">
+        <div class="faq-item reveal">
+          <button class="faq-question">Do my customers need to install anything?<span class="faq-icon">+</span></button>
+          <div class="faq-answer"><p>No. It is plain iMessage. Customers text your business number exactly like they always would — LazusAI answers on the other side.</p></div>
+        </div>
+        <div class="faq-item reveal reveal-delay-1">
+          <button class="faq-question">Will it actually sound like my business?<span class="faq-icon">+</span></button>
+          <div class="faq-answer"><p>Yes. Each business gets a custom voice and personality trained on your own knowledge base — pricing, hours, services, and tone.</p></div>
+        </div>
+        <div class="faq-item reveal reveal-delay-2">
+          <button class="faq-question">What happens when it cannot handle something?<span class="faq-icon">+</span></button>
+          <div class="faq-answer"><p>It escalates. You get an instant owner alert in Telegram with the full conversation context so a human can step in seamlessly.</p></div>
+        </div>
+        <div class="faq-item reveal reveal-delay-3">
+          <button class="faq-question">Is my data kept private?<span class="faq-icon">+</span></button>
+          <div class="faq-answer"><p>Completely. Every tenant has an isolated knowledge base and lead store, and inference runs on a self-hosted stack — no data crosses between businesses.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section" id="cta">
+    <div class="section">
+      <h2 class="cta-title reveal">Your next customer is texting right now.</h2>
+      <p class="cta-desc reveal">Give them an instant, on-brand answer — and book the job before your competitor even sees the message.</p>
+      <div class="cta-buttons reveal">
+        <button class="btn-primary" onclick="goToPage('contact')">Start free</button>
+        <button class="cta-btn-outline" onclick="goToPage('pricing')">See pricing</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-top">
+        <div class="footer-logo">
+          <img src="lazusai-logo.png" alt="LazusAI" id="footerLogoImg">
+          <span>Lazus<span class="red">AI</span></span>
+        </div>
+        <div class="footer-links">
+          <a onclick="goToPage('home')">Home</a>
+          <a onclick="goToPage('services')">Services</a>
+          <a onclick="goToPage('pricing')">Pricing</a>
+          <a onclick="goToPage('about')">About</a>
+          <a onclick="goToPage('contact')">Contact</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>2026 LazusAI. AI receptionist for iMessage.</span>
+        <span style="font-family:var(--font-display);">Runs on your own stack · no external AI fees</span>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<!-- ========== SERVICES PAGE ========== -->
+<div class="page" id="page-services">
+  <section class="services-hero">
+    <div class="services-hero-bg" id="servicesHeroBg"></div>
+    <div class="services-hero-content">
+      <div class="section-label reveal">Our Services</div>
+      <h1 class="services-hero-title reveal">AI-powered reception<br>for every touchpoint.</h1>
+      <p class="services-hero-desc reveal">From the first text to the final booking, LazusAI handles the entire customer conversation lifecycle — so you never lose a lead to silence.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label reveal">What we do</div>
+      <h2 class="section-title reveal">Six services. One seamless experience.</h2>
+      <p class="section-subtitle reveal">Each service is designed to solve a specific pain point in the local service business workflow.</p>
+    </div>
+    <div class="service-detail-grid">
+      <div class="service-detail-card reveal">
+        <div class="icon-wrap">⚡</div>
+        <h3>Instant AI Replies</h3>
+        <p>Every incoming text gets an answer in under 3 seconds. No hold music, no voicemail, no missed opportunities. The AI understands context, asks clarifying questions, and keeps the conversation moving.</p>
+        <ul>
+          <li>Sub-3-second response time</li>
+          <li>Context-aware follow-ups</li>
+          <li>Multi-turn conversation handling</li>
+          <li>Custom tone per business</li>
+        </ul>
+      </div>
+      <div class="service-detail-card reveal reveal-delay-1">
+        <div class="icon-wrap">📅</div>
+        <h3>Smart Scheduling</h3>
+        <p>Automatically offers available time slots, checks for conflicts, and confirms bookings directly in the chat. Integrates with Google Calendar, Outlook, and most major scheduling platforms.</p>
+        <ul>
+          <li>Real-time calendar sync</li>
+          <li>Conflict detection</li>
+          <li>Automatic reminders</li>
+          <li>Rescheduling support</li>
+        </ul>
+      </div>
+      <div class="service-detail-card reveal">
+        <div class="icon-wrap">🎯</div>
+        <h3>Lead Capture & Qualification</h3>
+        <p>Every conversation is automatically parsed into structured lead data — name, service needed, urgency, budget, location. Qualified leads get flagged for immediate follow-up.</p>
+        <ul>
+          <li>Automatic data extraction</li>
+          <li>Lead scoring</li>
+          <li>CRM integration</li>
+          <li>Export to CSV/JSON</li>
+        </ul>
+      </div>
+      <div class="service-detail-card reveal reveal-delay-1">
+        <div class="icon-wrap">🗣️</div>
+        <h3>Voice Note Transcription</h3>
+        <p>Customers send voice memos? No problem. LazusAI transcribes, understands, and responds — just like it would to a text. Perfect for busy customers on the go.</p>
+        <ul>
+          <li>99%+ transcription accuracy</li>
+          <li>Multi-language support</li>
+          <li>Noise filtering</li>
+          <li>Instant text response</li>
+        </ul>
+      </div>
+      <div class="service-detail-card reveal">
+        <div class="icon-wrap">🔔</div>
+        <h3>Owner Alerts & Escalation</h3>
+        <p>Get instant Telegram notifications for every booking, lead, or escalation. Full conversation context included. Step in anytime with a single tap.</p>
+        <ul>
+          <li>Real-time Telegram alerts</li>
+          <li>Full conversation history</li>
+          <li>One-tap human handoff</li>
+          <li>Custom alert rules</li>
+        </ul>
+      </div>
+      <div class="service-detail-card reveal reveal-delay-1">
+        <div class="icon-wrap">🧠</div>
+        <h3>Knowledge Base Training</h3>
+        <p>Upload your pricing, services, FAQs, and brand voice. The AI learns your business inside and out — and keeps getting smarter with every conversation.</p>
+        <ul>
+          <li>Custom knowledge upload</li>
+          <li>Auto-learning from chats</li>
+          <li>Brand voice calibration</li>
+          <li>Continuous improvement</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="background:var(--black); color:var(--white); border-radius:24px; margin:40px auto; max-width:1200px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:center;">
+      <div class="reveal">
+        <div class="section-label" style="color:#ff6b64;">Integration</div>
+        <h2 class="section-title" style="margin:0 0 20px;">Plays nice with your stack.</h2>
+        <p class="section-subtitle" style="color:var(--gray-300); margin:0 0 30px; text-align:left;">LazusAI connects to the tools you already use. No rip-and-replace required.</p>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+          <div style="background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:16px;">
+            <div style="font-weight:700; font-size:15px; margin-bottom:4px;">Google Calendar</div>
+            <div style="font-size:13px; color:var(--gray-400);">Auto-sync bookings</div>
+          </div>
+          <div style="background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:16px;">
+            <div style="font-weight:700; font-size:15px; margin-bottom:4px;">Telegram</div>
+            <div style="font-size:13px; color:var(--gray-400);">Owner alerts</div>
+          </div>
+          <div style="background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:16px;">
+            <div style="font-weight:700; font-size:15px; margin-bottom:4px;">iMessage</div>
+            <div style="font-size:13px; color:var(--gray-400);">Native messaging</div>
+          </div>
+          <div style="background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:16px;">
+            <div style="font-weight:700; font-size:15px; margin-bottom:4px;">Zapier</div>
+            <div style="font-size:13px; color:var(--gray-400);">Workflow automation</div>
+          </div>
+        </div>
+      </div>
+      <div class="reveal reveal-delay-1" style="display:flex; justify-content:center;">
+        <div style="width:280px; border-radius:34px; background:#0a0a0c; border:1px solid #2a2a30; padding:14px; box-shadow:0 40px 80px rgba(0,0,0,.5);">
+          <div style="border-radius:28px; background:#0a0a0c; overflow:hidden; display:flex; flex-direction:column; height:400px; padding:20px;">
+            <div style="text-align:center; margin-bottom:20px;">
+              <div style="font-size:14px; font-weight:700; color:var(--white);">Connected Services</div>
+              <div style="font-size:11px; color:var(--gray-400);">4 active integrations</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <div style="display:flex; align-items:center; gap:12px; background:rgba(255,255,255,.05); border-radius:12px; padding:12px 16px;">
+                <div style="width:36px; height:36px; border-radius:10px; background:var(--red-light); display:flex; align-items:center; justify-content:center; font-size:18px;">📅</div>
+                <div><div style="font-weight:600; font-size:13px;">Google Calendar</div><div style="font-size:11px; color:var(--green);">● Connected</div></div>
+              </div>
+              <div style="display:flex; align-items:center; gap:12px; background:rgba(255,255,255,.05); border-radius:12px; padding:12px 16px;">
+                <div style="width:36px; height:36px; border-radius:10px; background:var(--red-light); display:flex; align-items:center; justify-content:center; font-size:18px;">✈️</div>
+                <div><div style="font-weight:600; font-size:13px;">Telegram</div><div style="font-size:11px; color:var(--green);">● Connected</div></div>
+              </div>
+              <div style="display:flex; align-items:center; gap:12px; background:rgba(255,255,255,.05); border-radius:12px; padding:12px 16px;">
+                <div style="width:36px; height:36px; border-radius:10px; background:var(--red-light); display:flex; align-items:center; justify-content:center; font-size:18px;">💬</div>
+                <div><div style="font-weight:600; font-size:13px;">iMessage</div><div style="font-size:11px; color:var(--green);">● Active</div></div>
+              </div>
+              <div style="display:flex; align-items:center; gap:12px; background:rgba(255,255,255,.05); border-radius:12px; padding:12px 16px;">
+                <div style="width:36px; height:36px; border-radius:10px; background:var(--red-light); display:flex; align-items:center; justify-content:center; font-size:18px;">⚡</div>
+                <div><div style="font-weight:600; font-size:13px;">Zapier</div><div style="font-size:11px; color:var(--green);">● Connected</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label reveal">Process</div>
+      <h2 class="section-title reveal">How we onboard you.</h2>
+      <p class="section-subtitle reveal">From signup to first AI reply in under 24 hours.</p>
+    </div>
+    <div class="steps-grid">
+      <div class="step-card reveal">
+        <div class="step-number">01</div>
+        <h3 class="step-title">Connect your number</h3>
+        <p class="step-desc">Link your business iMessage number. No hardware, no new apps. Just a simple setup flow.</p>
+      </div>
+      <div class="step-card reveal reveal-delay-1">
+        <div class="step-number">02</div>
+        <h3 class="step-title">Train your AI</h3>
+        <p class="step-desc">Upload your pricing, services, hours, and brand voice. The AI learns your business in minutes.</p>
+      </div>
+      <div class="step-card reveal reveal-delay-2">
+        <div class="step-number">03</div>
+        <h3 class="step-title">Go live</h3>
+        <p class="step-desc">Flip the switch. The AI starts answering texts immediately. You monitor via Telegram alerts.</p>
+      </div>
+      <div class="step-card dark reveal reveal-delay-3">
+        <div class="step-number">04</div>
+        <h3 class="step-title">Optimize</h3>
+        <p class="step-desc">Review conversation logs, tweak responses, and watch your booking rate climb week over week.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="section">
+      <h2 class="cta-title reveal">Ready to never miss a lead again?</h2>
+      <p class="cta-desc reveal">Get started in minutes. Your first 100 AI replies are free.</p>
+      <div class="cta-buttons reveal">
+        <button class="btn-primary" onclick="goToPage('contact')">Start free trial</button>
+        <button class="cta-btn-outline" onclick="goToPage('pricing')">View pricing</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-top">
+        <div class="footer-logo">
+          <img src="lazusai-logo.png" alt="LazusAI" id="footerLogoImg2">
+          <span>Lazus<span class="red">AI</span></span>
+        </div>
+        <div class="footer-links">
+          <a onclick="goToPage('home')">Home</a>
+          <a onclick="goToPage('services')">Services</a>
+          <a onclick="goToPage('pricing')">Pricing</a>
+          <a onclick="goToPage('about')">About</a>
+          <a onclick="goToPage('contact')">Contact</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>2026 LazusAI. AI receptionist for iMessage.</span>
+        <span style="font-family:var(--font-display);">Runs on your own stack · no external AI fees</span>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<!-- ========== INDUSTRIES PAGE ========== -->
+<div class="page" id="page-industries">
+  <section class="industries-hero">
+    <div class="industries-hero-content">
+      <div class="section-label reveal">Industries</div>
+      <h1 class="industries-hero-title reveal">Built for local service.<br>Perfected for every trade.</h1>
+      <p class="industries-hero-desc reveal">LazusAI understands the language, urgency, and workflow of your industry — so it books jobs like a seasoned pro.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="industries-grid">
+      <div class="industry-card reveal">
+        <div class="industry-icon">🔧</div>
+        <h3>Plumbing</h3>
+        <p>Emergency calls, leak assessments, and scheduling routine maintenance. The AI knows when to prioritize and when to book.</p>
+      </div>
+      <div class="industry-card reveal reveal-delay-1">
+        <div class="industry-icon">❄️</div>
+        <h3>HVAC</h3>
+        <p>Seasonal rush handling, system diagnostics, and maintenance contract renewals — all automated via text.</p>
+      </div>
+      <div class="industry-card reveal reveal-delay-2">
+        <div class="industry-icon">🦷</div>
+        <h3>Dental & Medical</h3>
+        <p>Appointment scheduling, insurance pre-checks, and follow-up reminders that keep your calendar full.</p>
+      </div>
+      <div class="industry-card reveal">
+        <div class="industry-icon">🏠</div>
+        <h3>Roofing</h3>
+        <p>Storm damage inquiries, estimate scheduling, and insurance claim coordination handled 24/7.</p>
+      </div>
+      <div class="industry-card reveal reveal-delay-1">
+        <div class="industry-icon">🌿</div>
+        <h3>Landscaping</h3>
+        <p>Seasonal service bookings, design consultations, and recurring maintenance schedules.</p>
+      </div>
+      <div class="industry-card reveal reveal-delay-2">
+        <div class="industry-icon">✂️</div>
+        <h3>Salons & Barbers</h3>
+        <p>Walk-in coordination, appointment bookings, and stylist-specific scheduling with zero no-shows.</p>
+      </div>
+      <div class="industry-card reveal">
+        <div class="industry-icon">🔌</div>
+        <h3>Electrical</h3>
+        <p>Emergency outage responses, panel upgrade consultations, and code compliance questions answered instantly.</p>
+      </div>
+      <div class="industry-card reveal reveal-delay-1">
+        <div class="industry-icon">🚗</div>
+        <h3>Auto Repair</h3>
+        <p>Service bookings, diagnostic triage, and parts availability checks — all via text conversation.</p>
+      </div>
+      <div class="industry-card reveal reveal-delay-2">
+        <div class="industry-icon">🏗️</div>
+        <h3>General Contracting</h3>
+        <p>Project inquiries, estimate scheduling, and subcontractor coordination managed seamlessly.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="background:var(--black); color:var(--white); border-radius:24px; margin:40px auto; max-width:1200px;">
+    <div class="section-header" style="margin-bottom:40px;">
+      <div class="section-label reveal" style="color:#ff6b64;">Results</div>
+      <h2 class="section-title reveal" style="color:var(--white);">Real numbers from real businesses.</h2>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:30px; text-align:center;">
+      <div class="reveal">
+        <div style="font-size:48px; font-weight:800; color:var(--red); line-height:1; margin-bottom:8px;">94%</div>
+        <div style="font-size:14px; color:var(--gray-300);">Lead response rate</div>
+      </div>
+      <div class="reveal reveal-delay-1">
+        <div style="font-size:48px; font-weight:800; color:var(--red); line-height:1; margin-bottom:8px;">3.2x</div>
+        <div style="font-size:14px; color:var(--gray-300);">Booking conversion lift</div>
+      </div>
+      <div class="reveal reveal-delay-2">
+        <div style="font-size:48px; font-weight:800; color:var(--red); line-height:1; margin-bottom:8px;">$0</div>
+        <div style="font-size:14px; color:var(--gray-300);">External AI fees</div>
+      </div>
+      <div class="reveal reveal-delay-3">
+        <div style="font-size:48px; font-weight:800; color:var(--red); line-height:1; margin-bottom:8px;">24/7</div>
+        <div style="font-size:14px; color:var(--gray-300);">Always on</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label reveal">Case Study</div>
+      <h2 class="section-title reveal">Bright Ave Plumbing</h2>
+      <p class="section-subtitle reveal">How a 3-person plumbing shop booked 47% more jobs in 30 days.</p>
+    </div>
+    <div style="background:var(--white); border:1px solid var(--gray-100); border-radius:24px; padding:40px; max-width:800px; margin:0 auto;">
+      <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:24px; margin-bottom:32px; text-align:center;">
+        <div>
+          <div style="font-size:36px; font-weight:800; color:var(--red);">47%</div>
+          <div style="font-size:14px; color:var(--gray-500);">More bookings</div>
+        </div>
+        <div>
+          <div style="font-size:36px; font-weight:800; color:var(--red);">12 hrs</div>
+          <div style="font-size:14px; color:var(--gray-500);">Saved per week</div>
+        </div>
+        <div>
+          <div style="font-size:36px; font-weight:800; color:var(--red);">$8,400</div>
+          <div style="font-size:14px; color:var(--gray-500);">Additional monthly revenue</div>
+        </div>
+      </div>
+      <p style="font-size:15px; line-height:1.7; color:var(--gray-500);">"Before LazusAI, we were losing 60% of after-hours inquiries to voicemail. Now every text gets an instant, on-brand reply that books the job. Our customers think they are texting with our office manager." — Dave Morales, Owner</p>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="section">
+      <h2 class="cta-title reveal">See what LazusAI can do for your industry.</h2>
+      <p class="cta-desc reveal">Book a 15-minute demo tailored to your specific business type.</p>
+      <div class="cta-buttons reveal">
+        <button class="btn-primary" onclick="goToPage('contact')">Book a demo</button>
+        <button class="cta-btn-outline" onclick="goToPage('services')">Explore services</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-top">
+        <div class="footer-logo">
+          <img src="lazusai-logo.png" alt="LazusAI" id="footerLogoImg3">
+          <span>Lazus<span class="red">AI</span></span>
+        </div>
+        <div class="footer-links">
+          <a onclick="goToPage('home')">Home</a>
+          <a onclick="goToPage('services')">Services</a>
+          <a onclick="goToPage('pricing')">Pricing</a>
+          <a onclick="goToPage('about')">About</a>
+          <a onclick="goToPage('contact')">Contact</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>2026 LazusAI. AI receptionist for iMessage.</span>
+        <span style="font-family:var(--font-display);">Runs on your own stack · no external AI fees</span>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<!-- ========== PRICING PAGE ========== -->
+<div class="page" id="page-pricing">
+  <section class="services-hero">
+    <div class="services-hero-bg" id="pricingHeroBg"></div>
+    <div class="services-hero-content">
+      <div class="section-label reveal">Pricing</div>
+      <h1 class="services-hero-title reveal">Simple, transparent pricing.<br>No hidden fees.</h1>
+      <p class="services-hero-desc reveal">Choose the plan that fits your business. All plans include unlimited AI replies, 24/7 uptime, and full iMessage integration.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="pricing-grid" style="margin-bottom:60px;">
+      <div class="pricing-card reveal">
+        <div class="pricing-name">Starter</div>
+        <div class="pricing-desc">For a single location.</div>
+        <div class="pricing-price"><span class="amount">$149</span><span class="period">/mo</span></div>
+        <div class="pricing-features">
+          <span><span class="check">✓</span> 1 business</span>
+          <span><span class="check">✓</span> 24/7 AI replies</span>
+          <span><span class="check">✓</span> Booking & lead capture</span>
+          <span><span class="check">✓</span> Owner alerts</span>
+          <span><span class="check">✓</span> Basic knowledge base</span>
+          <span><span class="check">✓</span> Email support</span>
+        </div>
+        <button class="pricing-btn" onclick="goToPage('contact')">Start free</button>
+      </div>
+      <div class="pricing-card popular reveal reveal-delay-1">
+        <div class="pricing-badge">Popular</div>
+        <div class="pricing-name">Pro</div>
+        <div class="pricing-desc">For growing businesses.</div>
+        <div class="pricing-price"><span class="amount">$349</span><span class="period">/mo</span></div>
+        <div class="pricing-features">
+          <span style="color:#ff8078;"><span class="check">✓</span> Everything in Starter</span>
+          <span><span class="check">✓</span> Custom voice & personality</span>
+          <span><span class="check">✓</span> Voice-note transcription</span>
+          <span><span class="check">✓</span> Knowledge base training</span>
+          <span><span class="check">✓</span> Priority scheduling logic</span>
+          <span><span class="check">✓</span> CRM integration</span>
+          <span><span class="check">✓</span> Priority support</span>
+        </div>
+        <button class="pricing-btn" onclick="goToPage('contact')">Book a demo</button>
+      </div>
+      <div class="pricing-card reveal reveal-delay-2">
+        <div class="pricing-name">Agency</div>
+        <div class="pricing-desc">Run many clients.</div>
+        <div class="pricing-price"><span class="amount">Custom</span></div>
+        <div class="pricing-features">
+          <span><span class="check">✓</span> Unlimited tenants</span>
+          <span><span class="check">✓</span> Operator dashboard</span>
+          <span><span class="check">✓</span> Per-client isolation</span>
+          <span><span class="check">✓</span> White-glove onboarding</span>
+          <span><span class="check">✓</span> Dedicated account manager</span>
+          <span><span class="check">✓</span> Custom integrations</span>
+          <span><span class="check">✓</span> SLA guarantee</span>
+        </div>
+        <button class="pricing-btn" onclick="goToPage('contact')">Talk to us</button>
+      </div>
+    </div>
+
+    <div style="background:var(--white); border:1px solid var(--gray-100); border-radius:24px; padding:40px; overflow-x:auto;">
+      <h3 style="font-size:22px; font-weight:700; margin-bottom:24px; text-align:center;">Feature Comparison</h3>
+      <table class="pricing-compare">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th style="text-align:center;">Starter</th>
+            <th style="text-align:center; background:var(--red-light);">Pro</th>
+            <th style="text-align:center;">Agency</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>AI Replies</td><td style="text-align:center;">Unlimited</td><td style="text-align:center; background:var(--red-light);">Unlimited</td><td style="text-align:center;">Unlimited</td></tr>
+          <tr><td>Businesses</td><td style="text-align:center;">1</td><td style="text-align:center; background:var(--red-light);">1</td><td style="text-align:center;">Unlimited</td></tr>
+          <tr><td>24/7 Uptime</td><td style="text-align:center;"><span class="check">✓</span></td><td style="text-align:center; background:var(--red-light);"><span class="check">✓</span></td><td style="text-align:center;"><span class="check">✓</span></td></tr>
+          <tr><td>Lead Capture</td><td style="text-align:center;"><span class="check">✓</span></td><td style="text-align:center; background:var(--red-light);"><span class="check">✓</span></td><td style="text-align:center;"><span class="check">✓</span></td></tr>
+          <tr><td>Booking Integration</td><td style="text-align:center;"><span class="check">✓</span></td><td style="text-align:center; background:var(--red-light);"><span class="check">✓</span></td><td style="text-align:center;"><span class="check">✓</span></td></tr>
+          <tr><td>Custom Voice</td><td style="text-align:center;"><span class="cross">—</span></td><td style="text-align:center; background:var(--red-light);"><span class="check">✓</span></td><td style="text-align:center;"><span class="check">✓</span></td></tr>
+          <tr><td>Voice Notes</td><td style="text-align:center;"><span class="cross">—</span></td><td style="text-align:center; background:var(--red-light);"><span class="check">✓</span></td><td style="text-align:center;"><span class="check">✓</span></td></tr>
+          <tr><td>Knowledge Base</td><td style="text-align:center;">Basic</td><td style="text-align:center; background:var(--red-light);">Advanced</td><td style="text-align:center;">Enterprise</td></tr>
+          <tr><td>CRM Integration</td><td style="text-align:center;"><span class="cross">—</span></td><td style="text-align:center; background:var(--red-light);"><span class="check">✓</span></td><td style="text-align:center;"><span class="check">✓</span></td></tr>
+          <tr><td>Agency Dashboard</td><td style="text-align:center;"><span class="cross">—</span></td><td style="text-align:center; background:var(--red-light);"><span class="cross">—</span></td><td style="text-align:center;"><span class="check">✓</span></td></tr>
+          <tr><td>White-label</td><td style="text-align:center;"><span class="cross">—</span></td><td style="text-align:center; background:var(--red-light);"><span class="cross">—</span></td><td style="text-align:center;"><span class="check">✓</span></td></tr>
+          <tr><td>Support</td><td style="text-align:center;">Email</td><td style="text-align:center; background:var(--red-light);">Priority</td><td style="text-align:center;">Dedicated</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label reveal">FAQ</div>
+      <h2 class="section-title reveal">Pricing questions.</h2>
+    </div>
+    <div class="faq-list">
+      <div class="faq-item reveal">
+        <button class="faq-question">Is there a free trial?<span class="faq-icon">+</span></button>
+        <div class="faq-answer"><p>Yes. Every plan starts with a 14-day free trial. No credit card required. You get full access to all features in your chosen tier.</p></div>
+      </div>
+      <div class="faq-item reveal reveal-delay-1">
+        <button class="faq-question">Can I upgrade or downgrade anytime?<span class="faq-icon">+</span></button>
+        <div class="faq-answer"><p>Absolutely. Change your plan at any time from your dashboard. Prorated billing means you only pay for what you use.</p></div>
+      </div>
+      <div class="faq-item reveal reveal-delay-2">
+        <button class="faq-question">Are there any per-message fees?<span class="faq-icon">+</span></button>
+        <div class="faq-answer"><p>Never. LazusAI runs on your own self-hosted stack, so there are no external AI API fees to pass on. One flat monthly rate.</p></div>
+      </div>
+      <div class="faq-item reveal reveal-delay-3">
+        <button class="faq-question">What payment methods do you accept?<span class="faq-icon">+</span></button>
+        <div class="faq-answer"><p>All major credit cards, ACH bank transfers, and wire transfers for annual Agency plans. Invoicing available for annual commitments.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="section">
+      <h2 class="cta-title reveal">Still have questions?</h2>
+      <p class="cta-desc reveal">Our team is happy to walk you through the perfect plan for your business.</p>
+      <div class="cta-buttons reveal">
+        <button class="btn-primary" onclick="goToPage('contact')">Talk to sales</button>
+        <button class="cta-btn-outline" onclick="goToPage('services')">Explore services</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-top">
+        <div class="footer-logo">
+          <img src="lazusai-logo.png" alt="LazusAI" id="footerLogoImg4">
+          <span>Lazus<span class="red">AI</span></span>
+        </div>
+        <div class="footer-links">
+          <a onclick="goToPage('home')">Home</a>
+          <a onclick="goToPage('services')">Services</a>
+          <a onclick="goToPage('pricing')">Pricing</a>
+          <a onclick="goToPage('about')">About</a>
+          <a onclick="goToPage('contact')">Contact</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>2026 LazusAI. AI receptionist for iMessage.</span>
+        <span style="font-family:var(--font-display);">Runs on your own stack · no external AI fees</span>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<!-- ========== ABOUT PAGE ========== -->
+<div class="page" id="page-about">
+  <section class="about-hero">
+    <div class="about-hero-content">
+      <div class="section-label reveal">About</div>
+      <h1 class="about-hero-title reveal">We built the receptionist<br>we wished we had.</h1>
+      <p class="about-hero-desc reveal">LazusAI was born from a simple frustration: local businesses lose thousands of dollars every month to missed texts and after-hours silence. We fixed it.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:center; margin-bottom:80px;">
+      <div class="reveal">
+        <h2 style="font-family:var(--font-display); font-size:clamp(28px,3.5vw,42px); font-weight:700; line-height:1.1; margin-bottom:20px; letter-spacing:-0.02em;">The problem we solve.</h2>
+        <p style="font-size:16px; line-height:1.7; color:var(--gray-500); margin-bottom:16px;">Local service businesses lose 40-60% of after-hours inquiries to voicemail. Customers expect instant replies — and when they do not get one, they move on to the next Google result.</p>
+        <p style="font-size:16px; line-height:1.7; color:var(--gray500);">Hiring a 24/7 receptionist costs $3,000+/month. Most small businesses cannot afford that. So they settle for missing leads — and losing revenue.</p>
+      </div>
+      <div class="reveal reveal-delay-1" style="background:var(--white); border:1px solid var(--gray-100); border-radius:24px; padding:40px; text-align:center;">
+        <div style="font-size:64px; font-weight:800; color:var(--red); line-height:1; margin-bottom:12px;">$47K</div>
+        <div style="font-size:16px; font-weight:600; margin-bottom:8px;">Average annual revenue lost</div>
+        <div style="font-size:14px; color:var(--gray-400);">By a 3-person service business to missed leads</div>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:center;">
+      <div class="reveal reveal-delay-1" style="background:var(--white); border:1px solid var(--gray-100); border-radius:24px; padding:40px; text-align:center;">
+        <div style="font-size:64px; font-weight:800; color:var(--green); line-height:1; margin-bottom:12px;">94%</div>
+        <div style="font-size:16px; font-weight:600; margin-bottom:8px;">Lead response rate with LazusAI</div>
+        <div style="font-size:14px; color:var(--gray-400);">Compared to 23% industry average</div>
+      </div>
+      <div class="reveal">
+        <h2 style="font-family:var(--font-display); font-size:clamp(28px,3.5vw,42px); font-weight:700; line-height:1.1; margin-bottom:20px; letter-spacing:-0.02em;">The solution we built.</h2>
+        <p style="font-size:16px; line-height:1.7; color:var(--gray-500); margin-bottom:16px;">LazusAI is an AI receptionist that lives inside iMessage — the app your customers already use. No downloads, no new apps, no friction.</p>
+        <p style="font-size:16px; line-height:1.7; color:var(--gray-500);">It answers every text instantly, books appointments, captures leads, and escalates when needed. All in your brand voice. All on your own infrastructure.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="background:var(--white); border-top:1px solid var(--gray-100); border-bottom:1px solid var(--gray-100);">
+    <div class="section-header">
+      <div class="section-label reveal">Values</div>
+      <h2 class="section-title reveal">What drives us.</h2>
+    </div>
+    <div class="about-values">
+      <div class="about-value reveal">
+        <div class="icon">⚡</div>
+        <h3>Speed First</h3>
+        <p>Every second a lead waits is a chance to lose them. We optimize for sub-3-second replies, always.</p>
+      </div>
+      <div class="about-value reveal reveal-delay-1">
+        <div class="icon">🔒</div>
+        <h3>Privacy by Design</h3>
+        <p>Your data stays yours. Self-hosted, isolated, and never shared between tenants. Period.</p>
+      </div>
+      <div class="about-value reveal reveal-delay-2">
+        <div class="icon">🤝</div>
+        <h3>Human When It Matters</h3>
+        <p>AI handles the routine. Humans handle the complex. Seamless escalation, zero friction.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-header">
+      <div class="section-label reveal">Team</div>
+      <h2 class="section-title reveal">The people behind LazusAI.</h2>
+    </div>
+    <div class="about-team">
+      <div class="team-card reveal">
+        <div class="team-avatar">👤</div>
+        <div class="team-name">Alex Chen</div>
+        <div class="team-role">Founder & CEO</div>
+      </div>
+      <div class="team-card reveal reveal-delay-1">
+        <div class="team-avatar">👤</div>
+        <div class="team-name">Maya Patel</div>
+        <div class="team-role">CTO</div>
+      </div>
+      <div class="team-card reveal reveal-delay-2">
+        <div class="team-avatar">👤</div>
+        <div class="team-name">Jordan Torres</div>
+        <div class="team-role">Head of Product</div>
+      </div>
+      <div class="team-card reveal reveal-delay-3">
+        <div class="team-avatar">👤</div>
+        <div class="team-name">Sam Rivera</div>
+        <div class="team-role">Head of Customer Success</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="section">
+      <h2 class="cta-title reveal">Join the mission.</h2>
+      <p class="cta-desc reveal">We are hiring engineers, designers, and customer success champions who care about local businesses.</p>
+      <div class="cta-buttons reveal">
+        <button class="btn-primary" onclick="goToPage('contact')">Get in touch</button>
+        <button class="cta-btn-outline" onclick="goToPage('services')">See our work</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-top">
+        <div class="footer-logo">
+          <img src="lazusai-logo.png" alt="LazusAI" id="footerLogoImg5">
+          <span>Lazus<span class="red">AI</span></span>
+        </div>
+        <div class="footer-links">
+          <a onclick="goToPage('home')">Home</a>
+          <a onclick="goToPage('services')">Services</a>
+          <a onclick="goToPage('pricing')">Pricing</a>
+          <a onclick="goToPage('about')">About</a>
+          <a onclick="goToPage('contact')">Contact</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>2026 LazusAI. AI receptionist for iMessage.</span>
+        <span style="font-family:var(--font-display);">Runs on your own stack · no external AI fees</span>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<!-- ========== CONTACT PAGE ========== -->
+<div class="page" id="page-contact">
+  <section class="contact-hero">
+    <div class="contact-hero-content">
+      <div class="section-label reveal">Contact</div>
+      <h1 class="contact-hero-title reveal">Let us talk.</h1>
+      <p class="contact-hero-desc reveal">Book a demo, ask a question, or just say hi. We reply to every message — human or AI.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="contact-grid">
+      <div class="contact-form reveal">
+        <h3 style="font-size:24px; font-weight:700; margin-bottom:8px;">Book a demo</h3>
+        <p style="font-size:15px; color:var(--gray-500); margin-bottom:28px;">Fill out the form and we will get back to you within 24 hours.</p>
+        <form id="contactForm" onsubmit="handleFormSubmit(event)">
+          <div class="form-group">
+            <label>Full name</label>
+            <input type="text" placeholder="John Smith" required>
+          </div>
+          <div class="form-group">
+            <label>Business name</label>
+            <input type="text" placeholder="Acme Plumbing" required>
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" placeholder="john@acme.com" required>
+          </div>
+          <div class="form-group">
+            <label>Phone</label>
+            <input type="tel" placeholder="(555) 123-4567">
+          </div>
+          <div class="form-group">
+            <label>Industry</label>
+            <select required>
+              <option value="">Select your industry</option>
+              <option>Plumbing</option>
+              <option>HVAC</option>
+              <option>Dental / Medical</option>
+              <option>Roofing</option>
+              <option>Landscaping</option>
+              <option>Salon / Barber</option>
+              <option>Electrical</option>
+              <option>Auto Repair</option>
+              <option>General Contracting</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>How many leads do you miss per month?</label>
+            <select>
+              <option value="">Select an estimate</option>
+              <option>1-5</option>
+              <option>6-15</option>
+              <option>16-30</option>
+              <option>30+</option>
+              <option>Not sure</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Message (optional)</label>
+            <textarea placeholder="Tell us about your business and what you are looking for..."></textarea>
+          </div>
+          <button type="submit" class="btn-primary" style="width:100%; justify-content:center;">Book my demo</button>
+        </form>
+      </div>
+      <div class="contact-info reveal reveal-delay-1">
+        <div class="contact-info-item">
+          <div class="icon">📧</div>
+          <div class="text">
+            <h4>Email us</h4>
+            <p>hello@lazusai.com</p>
+            <p style="font-size:12px; color:var(--gray-400); margin-top:4px;">We reply within 4 hours</p>
+          </div>
+        </div>
+        <div class="contact-info-item">
+          <div class="icon">💬</div>
+          <div class="text">
+            <h4>Text us</h4>
+            <p>(555) LAZUS-AI</p>
+            <p style="font-size:12px; color:var(--gray-400); margin-top:4px;">Yes, we use our own product</p>
+          </div>
+        </div>
+        <div class="contact-info-item">
+          <div class="icon">📍</div>
+          <div class="text">
+            <h4>Office</h4>
+            <p>123 Innovation Drive<br>San Francisco, CA 94105</p>
+          </div>
+        </div>
+        <div class="contact-info-item">
+          <div class="icon">🕐</div>
+          <div class="text">
+            <h4>Hours</h4>
+            <p>Mon–Fri: 9am–6pm PT<br>Sat–Sun: AI handles it</p>
+          </div>
+        </div>
+        <div style="background:var(--white); border:1px solid var(--gray-100); border-radius:16px; padding:24px; margin-top:12px;">
+          <div style="font-size:14px; font-weight:600; margin-bottom:8px;">Prefer a call?</div>
+          <p style="font-size:14px; color:var(--gray-500); margin:0 0 12px;">Schedule a 15-minute call with our team.</p>
+          <button class="btn-primary" style="font-size:14px; padding:10px 20px;" onclick="alert('Calendar booking coming soon!')">Schedule a call</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="section">
+      <h2 class="cta-title reveal">We cannot wait to meet you.</h2>
+      <p class="cta-desc reveal">Every great partnership starts with a conversation. Let us make yours count.</p>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-top">
+        <div class="footer-logo">
+          <img src="lazusai-logo.png" alt="LazusAI" id="footerLogoImg6">
+          <span>Lazus<span class="red">AI</span></span>
+        </div>
+        <div class="footer-links">
+          <a onclick="goToPage('home')">Home</a>
+          <a onclick="goToPage('services')">Services</a>
+          <a onclick="goToPage('pricing')">Pricing</a>
+          <a onclick="goToPage('about')">About</a>
+          <a onclick="goToPage('contact')">Contact</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>2026 LazusAI. AI receptionist for iMessage.</span>
+        <span style="font-family:var(--font-display);">Runs on your own stack · no external AI fees</span>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<script>
+// ========== LOGO SVG DATA ==========
+const logoSvg = `data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNDAwIDEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg4LCAxMCkiPgogICAgPCEtLSBMb2dvIEljb24gLS0+CiAgICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgwLCAwKSI+CiAgICAgIDwhLS0gSGV4YWdvbiBzaGFwZSAtLT4KICAgICAgPHBhdGggZD0iTTAgMjBMMTUgMEg1NUw3MCAyMEw1NSA0MEgxNUwwIDIwWiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMWEwMDAwIiBzdHJva2Utd2lkdGg9IjMuNSIvPgogICAgICA8IS0tIFJvYm90IGhlYWQgLS0+CiAgICAgIDxyZWN0IHg9IjE4IiB5PSIxMCIgd2lkdGg9IjM0IiBoZWlnaHQ9IjIyIiByeD0iMTEiIGZpbGw9IiNlODMxMmEiLz4KICAgICAgPCEtLSBSb2JvdCBleWVzIC0tPgogICAgICA8Y2lyY2xlIGN4PSIyNiIgY3k9IjE4IiByPSIzIiBmaWxsPSIjZmZmIi8+CiAgICAgIDxjaXJjbGUgY3g9IjQ0IiBjeT0iMTgiIHI9IjMiIGZpbGw9IiNmZmYiLz4KICAgICAgPCEtLSBSb2JvdCBtb3V0aCAoZ3JhcGgpIC0tPgogICAgICA8cGF0aCBkPSJNMjYgMjZxNSAzIDEwIDAiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgICAgPCEtLSBDaGF0IGJ1YmJsZSAtLT4KICAgICAgPHBhdGggZD0iTTUwIDI4aDhsNCA0di02aC0xMnYtNGgxMnE0IDAgNCA0djZxMCA0LTQgNGgtOGwtNCA0di02eiIgZmlsbD0iI2U4MzEyYSIvPgogICAgICA8IS0tIERvdHMgLS0+CiAgICAgIDxjaXJjbGUgY3g9IjU2IiBjeT0iMzAiIHI9IjEuNSIgZmlsbD0iI2ZmZiIvPgogICAgICA8Y2lyY2xlIGN4PSI2MSIgY3k9IjMwIiByPSIxLjUiIGZpbGw9IiNmZmYiLz4KICAgICAgPGNpcmNsZSBjeD0iNjYiIGN5PSIzMCIgcj0iMS41IiBmaWxsPSIjZmZmIi8+CiAgICA8L2c+CiAgICA8IS0tIFRleHQ6IExBWlVTIEFJIC0tPgogICAgPHRleHQgeD0iOTAiIHk9IjMyIiBmb250LWZhbWlseT0iJ0ludGVyJywgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iNDAiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiMxYTEwMDAiIGxldHRlci1zcGFjaW5nPSI0Ij5MQVpVUzwvdGV4dD4KICAgIDx0ZXh0IHg9IjI0NSIgeT0iMzIiIGZvbnQtZmFtaWx5PSInSW50ZXInLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI0MCIgZm9udC13ZWlnaHQ9IjcwMDAiIGZpbGw9IiNlODMxMmEiIGxldHRlci1zcGFjaW5nPSI0Ij5BSTwvdGV4dD4KICA8L2c+Cjwvc3ZnPg==`;
+
+// Replace all logo placeholders
+function loadLogos() {
+  const logoIds = ['navLogoImg', 'phoneAvatarImg', 'demoPhoneImg', 'footerLogoImg', 'footerLogoImg2', 'footerLogoImg3', 'footerLogoImg4', 'footerLogoImg5', 'footerLogoImg6'];
+  logoIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.src = logoSvg;
+  });
+}
+
+// ========== PAGE ROUTING ==========
+let currentPage = 'home';
+
+function goToPage(page) {
+  // Hide all pages
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  // Show target page
+  const target = document.getElementById('page-' + page);
+  if (target) {
+    target.classList.add('active');
+    currentPage = page;
+    window.scrollTo(0, 0);
+  }
+  // Update nav active state
+  document.querySelectorAll('.nav-links a').forEach(a => {
+    a.classList.toggle('active', a.dataset.page === page);
+  });
+  // Re-init animations for new page
+  setTimeout(() => {
+    initScrollAnimations();
+    initFAQ();
+  }, 100);
+}
+
+function scrollToSection(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: 'smooth' });
+}
+
+function toggleMobileMenu() {
+  const menu = document.getElementById('mobileMenu');
+  const toggle = document.getElementById('mobileToggle');
+  menu.classList.toggle('active');
+  toggle.classList.toggle('active');
+}
+
+function handleFormSubmit(e) {
+  e.preventDefault();
+  alert('Thanks! We will be in touch within 24 hours to schedule your demo.');
+  e.target.reset();
+}
+
+// ========== LENIS SMOOTH SCROLL ==========
+let lenis;
+function initLenis() {
+  if (typeof Lenis !== 'undefined') {
+    lenis = new Lenis({
+      duration: 1.2,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      smoothWheel: true,
+    });
+    function raf(time) {
+      lenis.raf(time);
+      requestAnimationFrame(raf);
+    }
+    requestAnimationFrame(raf);
+  }
+}
+
+// ========== GSAP SCROLL TRIGGER ==========
+function initGSAP() {
+  if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') return;
+  gsap.registerPlugin(ScrollTrigger);
+
+  // Hero title animation
+  gsap.from('.hero-title .line span', {
+    y: 100,
+    opacity: 0,
+    duration: 1.2,
+    stagger: 0.15,
+    ease: 'power4.out',
+    delay: 0.3
+  });
+
+  // Parallax orbs
+  gsap.utils.toArray('.parallax-layer').forEach(layer => {
+    const speed = layer.dataset.speed || 0.5;
+    gsap.to(layer, {
+      y: () => (1 - speed) * 300,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: layer,
+        start: 'top bottom',
+        end: 'bottom top',
+        scrub: true
+      }
+    });
+  });
+
+  // Phone 3D rotation on scroll
+  const phone3d = document.getElementById('phone3d');
+  if (phone3d) {
+    gsap.to(phone3d, {
+      rotateY: 15,
+      rotateX: -5,
+      scrollTrigger: {
+        trigger: '#hero',
+        start: 'top top',
+        end: 'bottom top',
+        scrub: 1
+      }
+    });
+  }
+
+  // Floating chips parallax
+  gsap.to('#chip1', {
+    y: -80,
+    scrollTrigger: { trigger: '#hero', start: 'top top', end: 'bottom top', scrub: 1.5 }
+  });
+  gsap.to('#chip2', {
+    y: -120,
+    scrollTrigger: { trigger: '#hero', start: 'top top', end: 'bottom top', scrub: 1.2 }
+  });
+  gsap.to('#chip3', {
+    y: -60,
+    scrollTrigger: { trigger: '#hero', start: 'top top', end: 'bottom top', scrub: 2 }
+  });
+}
+
+// ========== SCROLL REVEAL ==========
+function initScrollAnimations() {
+  const reveals = document.querySelectorAll('.reveal');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('active');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+  reveals.forEach(el => {
+    el.classList.remove('active');
+    observer.observe(el);
+  });
+}
+
+// ========== NAV SCROLL EFFECT ==========
+function initNav() {
+  const nav = document.getElementById('mainNav');
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 50) {
+      nav.classList.add('scrolled');
+    } else {
+      nav.classList.remove('scrolled');
+    }
+  }, { passive: true });
+}
+
+// ========== SCROLL PROGRESS ==========
+function initScrollProgress() {
+  const progress = document.getElementById('scrollProgress');
+  window.addEventListener('scroll', () => {
+    const scrollTop = window.scrollY;
+    const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const scrollPercent = scrollTop / docHeight;
+    progress.style.transform = 'scaleX(' + scrollPercent + ')';
+  }, { passive: true });
+}
+
+// ========== FAQ ACCORDION ==========
+function initFAQ() {
+  document.querySelectorAll('.faq-item').forEach(item => {
+    const q = item.querySelector('.faq-question');
+    const a = item.querySelector('.faq-answer');
+    if (!q || !a) return;
+    q.onclick = () => {
+      const isOpen = item.classList.contains('active');
+      // Close all
+      document.querySelectorAll('.faq-item').forEach(i => {
+        i.classList.remove('active');
+        const ans = i.querySelector('.faq-answer');
+        if (ans) ans.style.maxHeight = '0px';
+      });
+      // Open clicked if was closed
+      if (!isOpen) {
+        item.classList.add('active');
+        a.style.maxHeight = a.scrollHeight + 'px';
+      }
+    };
+  });
+}
+
+// ========== HERO CHAT ANIMATION ==========
+function initHeroChat() {
+  const chat = document.getElementById('heroChat');
+  if (!chat) return;
+  const msgs = chat.querySelectorAll('.msg');
+  const typing = document.getElementById('heroTyping');
+  let idx = 0;
+
+  function showNext() {
+    if (idx >= msgs.length) return;
+    const msg = msgs[idx];
+    const isAI = msg.classList.contains('ai');
+    if (isAI && typing) {
+      typing.style.display = 'flex';
+      setTimeout(() => {
+        typing.style.display = 'none';
+        msg.classList.add('show');
+        idx++;
+        setTimeout(showNext, 600);
+      }, 800);
+    } else {
+      msg.classList.add('show');
+      idx++;
+      setTimeout(showNext, 500);
+    }
+  }
+
+  // Start when hero is visible
+  const heroObserver = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        setTimeout(showNext, 800);
+        heroObserver.disconnect();
+      }
+    });
+  }, { threshold: 0.3 });
+  heroObserver.observe(chat);
+}
+
+// ========== DEMO CHAT LOOP ==========
+function initDemoChat() {
+  const chat = document.getElementById('demoChat');
+  if (!chat) return;
+  const typing = document.getElementById('demoTyping');
+  const script = [
+    { who: 'in', text: "Hey do you service AC units on weekends?" },
+    { who: 'ai', text: "We do! Same-day weekend visits are available. What is going on with the unit?" },
+    { who: 'in', text: "It is blowing warm air, not cooling at all" },
+    { who: 'ai', text: "Sounds like it could be low refrigerant or a compressor issue. I can send a tech tomorrow 10am–12pm. Book it?" },
+    { who: 'in', text: "Yes please, that works" },
+    { who: 'ai', text: "All set Sat 10am–12pm. You will get a reminder text. Talk soon!" }
+  ];
+
+  function createMsg(who, text) {
+    const el = document.createElement('div');
+    el.className = 'demo-msg ' + who;
+    el.textContent = text;
+    return el;
+  }
+
+  let running = false;
+  async function runLoop() {
+    if (running) return;
+    running = true;
+    while (true) {
+      // Clear old messages (keep typing indicator)
+      chat.querySelectorAll('.demo-msg').forEach(m => m.remove());
+      for (const s of script) {
+        if (s.who === 'ai' && typing) {
+          chat.appendChild(typing);
+          typing.style.display = 'flex';
+          await new Promise(r => setTimeout(r, 900));
+          typing.style.display = 'none';
+        }
+        const msg = createMsg(s.who, s.text);
+        chat.insertBefore(msg, typing);
+        await new Promise(r => setTimeout(r, 50));
+        msg.classList.add('show');
+        await new Promise(r => setTimeout(r, s.who === 'ai' ? 1200 : 900));
+      }
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
+
+  const demoObserver = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        runLoop();
+        demoObserver.disconnect();
+      }
+    });
+  }, { threshold: 0.3 });
+  demoObserver.observe(chat);
+}
+
+// ========== THREE.JS 3D PARTICLES ==========
+function initThreeJS() {
+  const canvas = document.getElementById('hero-3d-scene');
+  if (!canvas || typeof THREE === 'undefined') return;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  // Particles
+  const particleCount = 150;
+  const positions = new Float32Array(particleCount * 3);
+  const colors = new Float32Array(particleCount * 3);
+
+  for (let i = 0; i < particleCount; i++) {
+    positions[i * 3] = (Math.random() - 0.5) * 20;
+    positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 10;
+    // Red-ish colors
+    colors[i * 3] = 0.9 + Math.random() * 0.1;
+    colors[i * 3 + 1] = 0.2 + Math.random() * 0.3;
+    colors[i * 3 + 2] = 0.15 + Math.random() * 0.2;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  const material = new THREE.PointsMaterial({
+    size: 0.08,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.6,
+    blending: THREE.AdditiveBlending
+  });
+
+  const particles = new THREE.Points(geometry, material);
+  scene.add(particles);
+
+  // Floating shapes
+  const shapeGeo = new THREE.IcosahedronGeometry(0.5, 0);
+  const shapeMat = new THREE.MeshBasicMaterial({ color: 0xe8312a, wireframe: true, transparent: true, opacity: 0.15 });
+  const shapes = [];
+  for (let i = 0; i < 5; i++) {
+    const mesh = new THREE.Mesh(shapeGeo, shapeMat);
+    mesh.position.set((Math.random() - 0.5) * 15, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 5);
+    mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    scene.add(mesh);
+    shapes.push({ mesh, speed: 0.002 + Math.random() * 0.003 });
+  }
+
+  camera.position.z = 5;
+
+  let mouseX = 0, mouseY = 0;
+  document.addEventListener('mousemove', (e) => {
+    mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+  }, { passive: true });
+
+  let frame = 0;
+  function animate() {
+    requestAnimationFrame(animate);
+    frame++;
+
+    // Rotate particles
+    particles.rotation.y += 0.001;
+    particles.rotation.x += 0.0005;
+
+    // Mouse parallax
+    particles.rotation.y += mouseX * 0.0005;
+    particles.rotation.x += mouseY * 0.0005;
+
+    // Animate shapes
+    shapes.forEach((s, i) => {
+      s.mesh.rotation.x += s.speed;
+      s.mesh.rotation.y += s.speed * 0.7;
+      s.mesh.position.y += Math.sin(frame * 0.01 + i) * 0.002;
+    });
+
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // Resize handler
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+}
+
+// ========== PARTICLE CANVAS (floating dots) ==========
+function initParticleCanvas() {
+  const canvas = document.getElementById('particle-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  const particles = [];
+  const count = 50;
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      size: Math.random() * 2 + 0.5,
+      speedX: (Math.random() - 0.5) * 0.3,
+      speedY: (Math.random() - 0.5) * 0.3,
+      opacity: Math.random() * 0.3 + 0.1
+    });
+  }
+
+  let scrollY = 0;
+  window.addEventListener('scroll', () => { scrollY = window.scrollY; }, { passive: true });
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p => {
+      p.x += p.speedX;
+      p.y += p.speedY + scrollY * 0.0002;
+      if (p.x < 0) p.x = canvas.width;
+      if (p.x > canvas.width) p.x = 0;
+      if (p.y < 0) p.y = canvas.height;
+      if (p.y > canvas.height) p.y = 0;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(232, 49, 42, ' + p.opacity + ')';
+      ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+
+  window.addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  });
+}
+
+// ========== 3D TILT ON CARDS ==========
+function initCardTilt() {
+  document.querySelectorAll('.feature-card, .step-card, .pricing-card, .testimonial-card, .industry-card, .service-detail-card').forEach(card => {
+    card.addEventListener('mousemove', (e) => {
+      const rect = card.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width - 0.5;
+      const y = (e.clientY - rect.top) / rect.height - 0.5;
+      card.style.transform = 'perspective(1000px) rotateY(' + (x * 8) + 'deg) rotateX(' + (-y * 8) + 'deg) translateY(-6px)';
+    });
+    card.addEventListener('mouseleave', () => {
+      card.style.transform = 'perspective(1000px) rotateY(0) rotateX(0) translateY(0)';
+    });
+  });
+}
+
+// ========== MARQUEE SPEED BASED ON SCROLL ==========
+function initMarqueeScroll() {
+  const marquee = document.querySelector('.marquee-content');
+  if (!marquee) return;
+  let lastScroll = 0;
+  window.addEventListener('scroll', () => {
+    const diff = window.scrollY - lastScroll;
+    const speed = 30 - Math.min(20, Math.abs(diff) * 0.5);
+    marquee.style.animationDuration = speed + 's';
+    lastScroll = window.scrollY;
+  }, { passive: true });
+}
+
+// ========== PHONE MOUSE PARALLAX ==========
+function initPhoneParallax() {
+  const phone = document.getElementById('phone3d');
+  if (!phone) return;
+  document.addEventListener('mousemove', (e) => {
+    const x = (e.clientX / window.innerWidth - 0.5) * 2;
+    const y = (e.clientY / window.innerHeight - 0.5) * 2;
+    phone.style.transform = 'rotateY(' + (x * 10) + 'deg) rotateX(' + (-y * 5) + 'deg)';
+  }, { passive: true });
+}
+
+// ========== INIT ALL ==========
+document.addEventListener('DOMContentLoaded', () => {
+  loadLogos();
+  initLenis();
+  initGSAP();
+  initScrollAnimations();
+  initNav();
+  initScrollProgress();
+  initFAQ();
+  initHeroChat();
+  initDemoChat();
+  initThreeJS();
+  initParticleCanvas();
+  initCardTilt();
+  initMarqueeScroll();
+  initPhoneParallax();
+});
+</script>
+</body>
+</html>
