@@ -69,9 +69,21 @@ from fastapi.testclient import TestClient  # noqa: E402
 from core_api import app as core_app  # noqa: E402
 from lib import payments, notify  # noqa: E402
 
-# Stub payment link + notifications (no network).
-payments.create_payment_link = lambda *a, **k: ("https://square.link/u/test", None)
-notify.notify_staff_of_booking = lambda cfg, b, **k: {"staff": [b.get("staff")], "owner": True}
+# Stub payment link + notifications (no network), undone after this module
+# so test_payments.py exercises the real implementations.
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _stub_integrations():
+    mp = pytest.MonkeyPatch()
+    mp.setattr(payments, "create_payment_link",
+               lambda *a, **k: ("https://square.link/u/test", None))
+    mp.setattr(notify, "notify_staff_of_booking",
+               lambda cfg, b, **k: {"staff": [b.get("staff")], "owner": True})
+    yield
+    mp.undo()
+
 
 client = TestClient(core_app.app)
 FUTURE_MON = "2099-01-05"  # a Monday
