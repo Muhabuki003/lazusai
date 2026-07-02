@@ -234,9 +234,11 @@ def build_customer_prompt(cfg: dict, sender: str, today: str) -> str:
         f"Personality & rules: {cfg.get('ai_personality', '')}\n\n"
         f"Business context:\n{build_context_block(cfg)}\n"
         f"{build_booking_block(cfg, sender, today)}\n\n"
-        "Answer as the business. Be concise (SMS-length). If you cannot help, "
-        "offer to have the owner follow up and capture the customer's name and "
-        "contact details."
+        "Answer as the business. Be concise (SMS-length). Write plain "
+        "conversational text only — no markdown, no asterisks, no bullet "
+        "points; this is a text message. If you cannot help, offer to have "
+        "the owner follow up and capture the customer's name and contact "
+        "details."
     )
 
 
@@ -278,6 +280,18 @@ def parse_directive(text: str) -> dict | None:
 
 def strip_directive(text: str) -> str:
     return _DIRECTIVE_RE.sub("", text or "").strip()
+
+
+_MD_EMPHASIS_RE = re.compile(r"(\*\*|__|(?<!\w)\*(?!\s)|(?<!\w)_(?!\s))")
+_MD_HEADING_RE = re.compile(r"^#{1,6}\s+", re.M)
+
+
+def clean_sms(text: str) -> str:
+    """Strip markdown artifacts — iMessage renders them as literal symbols."""
+    out = _MD_HEADING_RE.sub("", text or "")
+    out = out.replace("**", "").replace("__", "").replace("`", "")
+    out = re.sub(r"^\s*[-•]\s+", "", out, flags=re.M)
+    return re.sub(r"\n{3,}", "\n\n", out).strip()
 
 
 # ------------------------------------------------------------------ lead check

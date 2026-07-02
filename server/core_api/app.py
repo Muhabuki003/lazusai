@@ -559,7 +559,7 @@ def _process_inbound(client_id: str, parsed: dict) -> None:
                     {"role": "system", "content": tool_msg}]
         reply = llm(messages) or reply
 
-    reply = inbound.strip_directive(reply) or inbound.FALLBACK_REPLY
+    reply = inbound.clean_sms(inbound.strip_directive(reply)) or inbound.FALLBACK_REPLY
 
     inbound.send_imessage_reply(chat_guid, reply)
 
