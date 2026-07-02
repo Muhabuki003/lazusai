@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LazusAI — Operator</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,'Inter',system-ui,sans-serif;background:#fbf9f4;color:#16161c;padding:32px 24px 80px}
+  .wrap{max-width:920px;margin:0 auto}
+  h1{font-size:24px;font-weight:800;margin-bottom:4px}
+  .sub{color:#74747f;font-size:14px;margin-bottom:28px}
+  .tabs{display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid #ececec}
+  .tabs button{background:none;border:none;padding:10px 16px;font-size:14px;font-weight:600;color:#74747f;cursor:pointer;border-bottom:2px solid transparent}
+  .tabs button.active{color:#16161c;border-bottom-color:#e8312a}
+  .card{background:#fff;border:1px solid #ececec;border-radius:14px;padding:20px 22px;margin-bottom:14px;box-shadow:0 4px 16px rgba(20,20,30,.05)}
+  .card .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
+  .card h3{font-size:16px;font-weight:700}
+  .card .meta{font-size:12.5px;color:#74747f;margin-top:2px}
+  .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.03em}
+  .badge.paid{background:#e6f7ee;color:#14713f}
+  .badge.unpaid{background:#f0f0f2;color:#66666e}
+  .field{font-size:13.5px;line-height:1.6;margin-top:8px}
+  .field b{color:#3a3a42}
+  .actions{display:flex;gap:10px;margin-top:14px}
+  button.btn{border:none;border-radius:9px;padding:9px 18px;font-size:13.5px;font-weight:700;cursor:pointer}
+  .btn.approve{background:#e8312a;color:#fff}
+  .btn.approve:hover{background:#c42a24}
+  .btn.reject{background:#fff;color:#66666e;border:1.5px solid #e2e2e6}
+  .btn.reject:hover{border-color:#c4c4ca}
+  .btn:disabled{opacity:.5;cursor:default}
+  .empty{color:#9a9aa2;font-size:14px;padding:40px 0;text-align:center}
+  a.dash-link{color:#e8312a;text-decoration:none;font-weight:600;font-size:13px}
+  .clientlist a{display:block;padding:12px 0;border-bottom:1px solid #f0f0f2;color:#16161c;text-decoration:none}
+  .clientlist a:hover{color:#e8312a}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>LazusAI Operator</h1>
+  <div class="sub">Pending signups, active clients, and per-client dashboards — one place.</div>
+
+  <div class="tabs">
+    <button class="active" data-tab="pending">Pending signups</button>
+    <button data-tab="approved">Approved</button>
+    <button data-tab="clients">All clients</button>
+  </div>
+
+  <div id="content"><div class="empty">Loading…</div></div>
+</div>
+
+<script>
+const API = '/api/signups';
+let tab = 'pending';
+
+async function load() {
+  const content = document.getElementById('content');
+  content.innerHTML = '<div class="empty">Loading…</div>';
+  if (tab === 'clients') {
+    const res = await fetch('/api/_clients');
+    const data = await res.json();
+    if (!data.clients || !data.clients.length) {
+      content.innerHTML = '<div class="empty">No clients yet.</div>';
+      return;
+    }
+    content.innerHTML = '<div class="card clientlist">' + data.clients.map(c =>
+      `<a href="/admin/${c.client_id}">${c.business_name || c.client_id} ` +
+      `<span class="badge ${c.active ? 'paid' : 'unpaid'}">${c.active ? 'active' : 'inactive'}</span></a>`
+    ).join('') + '</div>';
+    return;
+  }
+  const res = await fetch(`${API}?status=${tab === 'pending' ? 'pending' : 'approved'}`);
+  const data = await res.json();
+  const list = data.signups || [];
+  if (!list.length) {
+    content.innerHTML = `<div class="empty">No ${tab} signups.</div>`;
+    return;
+  }
+  content.innerHTML = list.map(renderCard).join('');
+}
+
+function renderCard(s) {
+  const paidBadge = s.paid
+    ? '<span class="badge paid">paid</span>'
+    : '<span class="badge unpaid">unpaid</span>';
+  const actions = s.status === 'pending' ? `
+    <div class="actions">
+      <button class="btn approve" onclick="approve('${s.id}', this)">Approve &amp; provision</button>
+      <button class="btn reject" onclick="reject('${s.id}', this)">Reject</button>
+    </div>` : s.client_id ? `
+    <div class="actions">
+      <a class="dash-link" href="/admin/${s.client_id}">Open client dashboard →</a>
+    </div>` : '';
+  return `<div class="card">
+    <div class="top">
+      <div>
+        <h3>${escapeHtml(s.business || '(no business name)')}</h3>
+        <div class="meta">${escapeHtml(s.industry || 'industry n/a')} · plan: ${escapeHtml(s.plan || '?')} · ${new Date(s.created_at).toLocaleString()}</div>
+      </div>
+      ${paidBadge}
+    </div>
+    <div class="field"><b>Contact:</b> ${escapeHtml(s.name)} · ${escapeHtml(s.email)} ${s.phone ? '· ' + escapeHtml(s.phone) : ''}</div>
+    ${s.services ? `<div class="field"><b>Services:</b> ${escapeHtml(s.services)}</div>` : ''}
+    ${s.hours ? `<div class="field"><b>Hours:</b> ${escapeHtml(s.hours)}</div>` : ''}
+    ${s.faqs ? `<div class="field"><b>FAQs:</b> ${escapeHtml(s.faqs)}</div>` : ''}
+    ${actions}
+  </div>`;
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function approve(id, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Provisioning…';
+  const res = await fetch(`${API}/${id}/approve`, { method: 'POST' });
+  if (res.ok) {
+    const data = await res.json();
+    alert(`Provisioned as ${data.client_id}. Assign an Apple ID/BlueBubbles chat guid in its dashboard, then toggle it active.`);
+    load();
+  } else {
+    btn.disabled = false;
+    btn.textContent = 'Approve & provision';
+    alert('Failed to approve — check server logs.');
+  }
+}
+
+async function reject(id, btn) {
+  if (!confirm('Reject this signup?')) return;
+  btn.disabled = true;
+  const res = await fetch(`${API}/${id}/reject`, { method: 'POST' });
+  if (res.ok) load();
+  else { btn.disabled = false; alert('Failed to reject.'); }
+}
+
+document.querySelector('.tabs').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  tab = b.dataset.tab;
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
+  load();
+});
+
+load();
+</script>
+</body>
+</html>

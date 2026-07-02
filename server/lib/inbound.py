@@ -178,6 +178,17 @@ def build_context_block(cfg: dict) -> str:
         lines.append("Hours: " + "; ".join(f"{k} {v}" for k, v in cfg["hours"].items()))
     for f in cfg.get("faqs") or []:
         lines.append(f"FAQ — {f.get('q', '')} {f.get('a', '')}")
+
+    # Freeform notes captured at signup, before an operator has structured
+    # them into services/pricing/hours/faqs via the dashboard.
+    raw = cfg.get("raw_intake") or {}
+    if raw.get("services"):
+        lines.append("Services & pricing (operator notes): " + raw["services"])
+    if raw.get("hours"):
+        lines.append("Hours (operator notes): " + raw["hours"])
+    if raw.get("faqs"):
+        lines.append("Common questions (operator notes): " + raw["faqs"])
+
     return "\n".join(lines)
 
 

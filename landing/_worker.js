@@ -7,9 +7,11 @@
 // Required Pages project settings (production env):
 //   CORE_API_URL          e.g. https://core.lazusai.com
 //   LAZUSAI_CORE_KEY      secret; same key the Core API expects in X-LazusAI-Key
+//   ADMIN_USER            HTTP Basic auth username for /admin*
+//   ADMIN_PASSWORD        HTTP Basic auth password (secret) for /admin*
 //
-// Optional — Stripe self-serve signup (wizard falls back to lead capture
-// until these are set):
+// Optional — Stripe self-serve signup (wizard falls back to a queued signup
+// with no payment until these are set):
 //   STRIPE_SECRET_KEY     sk_test_... / sk_live_...
 //   STRIPE_WEBHOOK_SECRET whsec_... (from the Stripe webhook endpoint config)
 //   STRIPE_PRICE_STARTER  price_... (monthly subscription price id)
@@ -35,6 +37,42 @@ export default {
 
     if (url.pathname === "/api/stripe-webhook" && request.method === "POST") {
       return handleStripeWebhook(request, env);
+    }
+
+    // Everything below is operator-only: gate on HTTP Basic auth.
+    const isOperatorRoute =
+      url.pathname === "/admin" ||
+      url.pathname.startsWith("/admin/") ||
+      url.pathname === "/api/signups" ||
+      url.pathname.startsWith("/api/signups/") ||
+      url.pathname === "/api/_clients" ||
+      (url.pathname.startsWith("/api/") &&
+        url.pathname !== "/api/demo-request" &&
+        url.pathname !== "/api/signup" &&
+        url.pathname !== "/api/stripe-webhook");
+
+    if (isOperatorRoute) {
+      const authError = requireBasicAuth(request, env);
+      if (authError) return authError;
+
+      if (url.pathname === "/admin") {
+        return env.ASSETS.fetch(new URL("/admin-operator.html", request.url));
+      }
+      if (url.pathname.startsWith("/admin/")) {
+        return handleClientDashboard(request, env, url);
+      }
+      if (url.pathname === "/api/_clients") {
+        return proxyToCore(env, "GET", "/clients");
+      }
+      if (url.pathname === "/api/signups" || url.pathname.startsWith("/api/signups/")) {
+        return proxyToCore(env, request.method, url.pathname.replace("/api", "") + url.search,
+          request.method === "GET" ? undefined : await request.text());
+      }
+      // /api/:client_id/* — per-client dashboard data proxy.
+      const parts = url.pathname.split("/").filter(Boolean); // ["api", id, ...rest]
+      const rest = parts.slice(2).map(encodeURIComponent).join("/");
+      return proxyToCore(env, request.method, `/clients/${encodeURIComponent(parts[1])}/${rest}${url.search}`,
+        request.method === "GET" || request.method === "HEAD" ? undefined : await request.text());
     }
 
     return env.ASSETS.fetch(request);
@@ -90,18 +128,7 @@ async function handleDemoRequest(request, env) {
     escalated: false,
   };
 
-  const resp = await fetch(
-    `${env.CORE_API_URL}/clients/lazusai-website/leads`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-LazusAI-Key": env.LAZUSAI_CORE_KEY || "",
-      },
-      body: JSON.stringify(lead),
-    },
-  );
-
+  const resp = await coreFetch(env, "POST", "/clients/lazusai-website/leads", lead);
   if (!resp.ok) {
     return json({ error: "upstream_failed" }, 502);
   }
@@ -140,22 +167,22 @@ async function handleSignup(request, env) {
     faqs: str(body.faqs).slice(0, 480),
   };
 
+  // Every submission becomes a pending signup — reviewed and approved by the
+  // operator at /admin regardless of whether payment is configured. This is
+  // the single source of truth the wizard writes to; nothing is provisioned
+  // automatically just because a form was filled out.
+  const signupResp = await coreFetch(env, "POST", "/signups", {
+    name, email, phone: meta.phone, business, industry: meta.industry,
+    services: meta.services, hours: meta.hours, faqs: meta.faqs, plan,
+  });
+  if (!signupResp.ok) {
+    return json({ error: "signup_failed" }, 502);
+  }
+  const { id: signupId } = await signupResp.json();
+
   const priceId = env[PLANS[plan]];
   if (!env.STRIPE_SECRET_KEY || !priceId) {
-    // Payments not configured yet — capture the signup as a lead so nothing
-    // is lost, and tell the client we'll be in touch.
-    await postLead(env, {
-      sender: "lazusai.com get-started wizard",
-      name,
-      email,
-      phone: meta.phone,
-      summary: `SIGNUP (payments not yet configured) — ${business} · plan: ${plan}` +
-        (meta.industry ? ` · ${meta.industry}` : ""),
-      message: [meta.services && `Services: ${meta.services}`,
-                meta.hours && `Hours: ${meta.hours}`,
-                meta.faqs && `FAQs: ${meta.faqs}`].filter(Boolean).join("\n"),
-    });
-    return json({ ok: true, mode: "lead" });
+    return json({ ok: true, mode: "queued", signup_id: signupId });
   }
 
   const params = new URLSearchParams({
@@ -166,10 +193,8 @@ async function handleSignup(request, env) {
     success_url: "https://lazusai.com/get-started?status=success",
     cancel_url: "https://lazusai.com/get-started?status=cancelled",
     allow_promotion_codes: "true",
+    "metadata[signup_id]": signupId,
   });
-  for (const [k, v] of Object.entries(meta)) {
-    if (v) params.set(`metadata[${k}]`, v);
-  }
 
   const resp = await fetch("https://api.stripe.com/v1/checkout/sessions", {
     method: "POST",
@@ -207,50 +232,20 @@ async function handleStripeWebhook(request, env) {
 
   const session = event.data && event.data.object ? event.data.object : {};
   const meta = session.metadata || {};
-  const business = meta.business || "Unknown Business";
-
-  // Create the tenant, inactive until an iMessage number is provisioned.
-  const created = await coreFetch(env, "POST", "/clients", {
-    business_name: business,
-    apple_id_number: "",
-    industry: meta.industry || "",
-    services: meta.services ? meta.services.split(",").map((s) => s.trim()).filter(Boolean) : [],
-    integrations: {
-      billing: {
-        processor: "stripe",
-        stripe_customer_id: session.customer || "",
-        stripe_subscription_id: session.subscription || "",
-        plan: meta.plan || "",
-        signup_email: meta.email || session.customer_details?.email || "",
-        signup_phone: meta.phone || "",
-        signup_notes: [meta.hours && `Hours: ${meta.hours}`,
-                       meta.faqs && `FAQs: ${meta.faqs}`].filter(Boolean).join("\n"),
-      },
-    },
-  });
-
-  let clientId = "";
-  if (created.ok) {
-    const data = await created.json();
-    clientId = data.client_id || "";
-    if (clientId) {
-      await coreFetch(env, "POST", `/clients/${clientId}/toggle?active=false`);
-    }
+  const signupId = meta.signup_id || "";
+  if (!signupId) {
+    return json({ ok: true, ignored: "no_signup_id" });
   }
 
-  // Surface the paid signup where the operator already looks for leads.
-  await postLead(env, {
-    sender: "stripe checkout",
-    name: meta.name || "",
-    email: meta.email || session.customer_details?.email || "",
-    phone: meta.phone || "",
-    summary: `💰 PAID SIGNUP — ${business} · plan: ${meta.plan || "?"} · ` +
-      `client_id: ${clientId || "CREATE FAILED"} · needs iMessage number provisioning`,
-    message: `Stripe customer: ${session.customer || "?"} · subscription: ${session.subscription || "?"}`,
-    escalated: true,
+  // Payment does NOT provision the tenant — it flags the queued signup as
+  // paid (and Telegram-notifies the operator) so it can still be reviewed
+  // and approved at /admin like any other signup.
+  await coreFetch(env, "POST", `/signups/${signupId}/mark-paid`, {
+    stripe_customer_id: session.customer || "",
+    stripe_subscription_id: session.subscription || "",
   });
 
-  return json({ ok: true, client_id: clientId });
+  return json({ ok: true, signup_id: signupId });
 }
 
 async function verifyStripeSignature(payload, sigHeader, secret) {
@@ -281,22 +276,64 @@ async function verifyStripeSignature(payload, sigHeader, secret) {
 }
 
 async function coreFetch(env, method, path, body) {
+  // `body` may be a plain object (JSON-encoded here) or an already-serialized
+  // string (passed through as-is — used when proxying a request we already
+  // read the text of, so we don't double-encode it).
   return fetch(`${env.CORE_API_URL}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
       "X-LazusAI-Key": env.LAZUSAI_CORE_KEY || "",
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: body == null ? undefined : (typeof body === "string" ? body : JSON.stringify(body)),
   });
 }
 
-async function postLead(env, lead) {
-  try {
-    await coreFetch(env, "POST", "/clients/lazusai-website/leads", lead);
-  } catch {
-    // best-effort
+/* -------------------------------------------------------- operator admin */
+
+function requireBasicAuth(request, env) {
+  const user = env.ADMIN_USER || "";
+  const pass = env.ADMIN_PASSWORD || "";
+  if (!user || !pass) {
+    return json({ error: "admin_not_configured" }, 503);
   }
+  const header = request.headers.get("Authorization") || "";
+  if (header.startsWith("Basic ")) {
+    let decoded = "";
+    try {
+      decoded = atob(header.slice(6));
+    } catch {
+      decoded = "";
+    }
+    if (timingSafeEqual(decoded, `${user}:${pass}`)) return null;
+  }
+  return new Response("Authentication required", {
+    status: 401,
+    headers: { "WWW-Authenticate": 'Basic realm="LazusAI Admin"' },
+  });
+}
+
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+async function handleClientDashboard(request, env, url) {
+  const clientId = url.pathname.split("/")[2];
+  if (!clientId) return json({ error: "missing_client_id" }, 400);
+  const asset = await env.ASSETS.fetch(new URL("/admin-dashboard.html", request.url));
+  const html = (await asset.text()).replace(/__LAZUSAI_CLIENT_ID__/g, clientId);
+  return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+}
+
+async function proxyToCore(env, method, path, body) {
+  const resp = await coreFetch(env, method, path, body);
+  return new Response(resp.body, {
+    status: resp.status,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 function str(v) {

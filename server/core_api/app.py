@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 # Make the shared libs importable whether run from repo root or server/.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import bookings, cf_kv, chroma_store, clients, inbound, nim_client, notify, payments  # noqa: E402
+from lib import bookings, cf_kv, chroma_store, clients, inbound, nim_client, notify, payments, signups  # noqa: E402
 
 CORE_KEY = os.environ.get("LAZUSAI_CORE_KEY", "")
 
@@ -161,33 +161,38 @@ def list_all(x_lazusai_key: str | None = Header(default=None)):
     return {"clients": out}
 
 
-@app.post("/clients")
-def create(body: NewClient, x_lazusai_key: str | None = Header(default=None)):
-    _auth(x_lazusai_key)
-    cid = clients.unique_client_id(body.business_name)
+def _provision_client(fields: dict) -> dict:
+    """Build + save a tenant config, create its Chroma collection, reindex,
+    and best-effort push to Worker KV. Shared by POST /clients and the
+    /signups/{id}/approve flow so approving a self-serve signup needs zero
+    manual re-entry of what the customer already told us."""
+    business_name = fields.get("business_name", "")
+    apple_id_number = fields.get("apple_id_number", "")
+    cid = clients.unique_client_id(business_name)
     cfg = {
         "client_id": cid,
-        "business_name": body.business_name,
-        "industry": body.industry,
-        "apple_id_number": body.apple_id_number,
-        "bluebubbles_chat_guid": body.bluebubbles_chat_guid
-        or f"iMessage;-;{body.apple_id_number}",
-        "owner_telegram": body.owner_telegram,
-        "hours": body.hours,
-        "services": body.services,
-        "pricing": body.pricing,
-        "faqs": body.faqs,
-        "escalation_keywords": body.escalation_keywords
+        "business_name": business_name,
+        "industry": fields.get("industry", ""),
+        "apple_id_number": apple_id_number,
+        "bluebubbles_chat_guid": fields.get("bluebubbles_chat_guid")
+        or (f"iMessage;-;{apple_id_number}" if apple_id_number else ""),
+        "owner_telegram": fields.get("owner_telegram", ""),
+        "hours": fields.get("hours") or {},
+        "services": fields.get("services") or [],
+        "pricing": fields.get("pricing") or {},
+        "faqs": fields.get("faqs") or [],
+        "raw_intake": fields.get("raw_intake") or {},
+        "escalation_keywords": fields.get("escalation_keywords")
         or ["complaint", "refund", "manager", "emergency", "lawyer"],
-        "ai_personality": body.ai_personality
-        or f"Friendly, concise front-desk assistant for {body.business_name}.",
-        "booking_enabled": body.booking_enabled,
-        "slot_minutes": body.slot_minutes or 30,
-        "services_matrix": body.services_matrix,
-        "staff": body.staff,
-        "integrations": body.integrations,
+        "ai_personality": fields.get("ai_personality")
+        or f"Friendly, concise front-desk assistant for {business_name}.",
+        "booking_enabled": fields.get("booking_enabled", False),
+        "slot_minutes": fields.get("slot_minutes") or 30,
+        "services_matrix": fields.get("services_matrix") or [],
+        "staff": fields.get("staff") or [],
+        "integrations": fields.get("integrations") or {},
         "dashboard_user": cid,
-        "active": True,
+        "active": fields.get("active", True),
         "created_at": clients._now(),
     }
     clients.save_client(cfg)
@@ -198,6 +203,12 @@ def create(body: NewClient, x_lazusai_key: str | None = Header(default=None)):
     # creds aren't configured.
     kv_synced = cf_kv.push_client(cfg)
     return {"client_id": cid, "config": cfg, "kv_synced": kv_synced}
+
+
+@app.post("/clients")
+def create(body: NewClient, x_lazusai_key: str | None = Header(default=None)):
+    _auth(x_lazusai_key)
+    return _provision_client(body.model_dump())
 
 
 @app.get("/clients/{client_id}/config")
@@ -584,6 +595,99 @@ def _process_inbound(client_id: str, parsed: dict) -> None:
                 f"{prefix} — {cfg.get('business_name', client_id)}\n"
                 f"From: {lead.get('name') or sender}\n{text[:300]}",
             )
+
+
+class SignupCreate(BaseModel):
+    name: str = ""
+    email: str = ""
+    phone: str = ""
+    business: str = ""
+    industry: str = ""
+    services: str = ""
+    hours: str = ""
+    faqs: str = ""
+    plan: str = ""
+
+
+@app.post("/signups")
+def create_signup(body: SignupCreate, x_lazusai_key: str | None = Header(default=None)):
+    """A /get-started wizard submission, queued for operator approval rather
+    than provisioned immediately — the only thing standing between a stranger
+    filling out a form and a live tenant is a human glance."""
+    _auth(x_lazusai_key)
+    rec = signups.create(body.model_dump())
+    operator_chat = os.environ.get("OPERATOR_TELEGRAM_CHAT_ID", "")
+    if operator_chat:
+        notify.send_telegram(
+            operator_chat,
+            f"🆕 New signup waiting for approval\n"
+            f"{rec['business']} ({rec['industry'] or 'industry n/a'}) · plan: {rec['plan']}\n"
+            f"Contact: {rec['name']} · {rec['email']} · {rec['phone']}\n"
+            f"Review: https://lazusai.com/admin",
+        )
+    return {"ok": True, "id": rec["id"]}
+
+
+@app.get("/signups")
+def list_signups(status: str | None = None, x_lazusai_key: str | None = Header(default=None)):
+    _auth(x_lazusai_key)
+    return {"signups": signups.list_signups(status=status)}
+
+
+@app.post("/signups/{signup_id}/approve")
+def approve_signup(signup_id: str, x_lazusai_key: str | None = Header(default=None)):
+    _auth(x_lazusai_key)
+    rec = signups.load(signup_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="not_found")
+    if rec["status"] != "pending":
+        raise HTTPException(status_code=400, detail=f"already_{rec['status']}")
+
+    result = _provision_client({
+        "business_name": rec["business"],
+        "industry": rec["industry"],
+        "owner_telegram": os.environ.get("OPERATOR_TELEGRAM_CHAT_ID", ""),
+        "raw_intake": {"services": rec["services"], "hours": rec["hours"], "faqs": rec["faqs"]},
+        # No phone number yet — stays inactive (unroutable) until an Apple
+        # ID/BlueBubbles chat guid is assigned via the client dashboard.
+        "active": False,
+    })
+    signups.set_status(signup_id, "approved", client_id=result["client_id"])
+    return {"ok": True, "client_id": result["client_id"], "config": result["config"]}
+
+
+class SignupPaid(BaseModel):
+    stripe_customer_id: str = ""
+    stripe_subscription_id: str = ""
+
+
+@app.post("/signups/{signup_id}/mark-paid")
+def mark_signup_paid(signup_id: str, body: SignupPaid, x_lazusai_key: str | None = Header(default=None)):
+    """Called by the Stripe webhook handler on checkout.session.completed.
+    Payment does NOT auto-provision the tenant — it flags the signup as paid
+    so the operator dashboard can prioritize it, but approval is still
+    required (see /signups/{id}/approve)."""
+    _auth(x_lazusai_key)
+    rec = signups.mark_paid(signup_id, body.stripe_customer_id, body.stripe_subscription_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="not_found")
+    operator_chat = os.environ.get("OPERATOR_TELEGRAM_CHAT_ID", "")
+    if operator_chat:
+        notify.send_telegram(
+            operator_chat,
+            f"💰 Payment received — {rec['business']} (plan: {rec['plan']})\n"
+            f"Ready to approve: https://lazusai.com/admin",
+        )
+    return {"ok": True}
+
+
+@app.post("/signups/{signup_id}/reject")
+def reject_signup(signup_id: str, x_lazusai_key: str | None = Header(default=None)):
+    _auth(x_lazusai_key)
+    rec = signups.set_status(signup_id, "rejected")
+    if not rec:
+        raise HTTPException(status_code=404, detail="not_found")
+    return {"ok": True}
 
 
 @app.get("/clients/{client_id}/identify")
