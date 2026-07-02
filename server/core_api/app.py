@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Make the shared libs importable whether run from repo root or server/.
@@ -29,6 +30,20 @@ from lib import bookings, cf_kv, chroma_store, clients, nim_client, notify, paym
 CORE_KEY = os.environ.get("LAZUSAI_CORE_KEY", "")
 
 app = FastAPI(title="LazusAI Core API", version="0.1.0")
+
+# CORS — allow the admin dashboard on pages.dev and lazusai.com
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://lazusai-admin.pages.dev",
+        "https://lazusai.pages.dev",
+        "https://lazusai.com",
+        "https://www.lazusai.com",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def _auth(key: str | None):
