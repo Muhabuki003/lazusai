@@ -55,9 +55,10 @@ export default {
       }
 
       if (pathname === "/" || pathname === "") {
-    return new Response(LANDING_HTML, {
-      headers: { "content-type": "text/html;charset=UTF-8" }
-    });
+    // Fetch the static index.html that was copied into dist/
+    const landingResp = await fetch(new URL("/index.html", request.url));
+    if (landingResp.status === 200) return landingResp;
+    return new Response("LazusAI — AI Receptionist", { status: 200, headers: { "content-type": "text/plain;charset=UTF-8" } });
   }
 
   return json({ error: "not_found" }, 404);
