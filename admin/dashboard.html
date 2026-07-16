@@ -463,7 +463,7 @@
       el.innerHTML = turns.slice().reverse().map(t => {
         const when = t.ts ? new Date(t.ts * 1000).toLocaleString() : '';
         const role = t.role === 'assistant' ? 'assistant' : 'user';
-        return `<div class="turn ${role}"><div class="meta"><span>${role==='assistant'?'🤖 LAZUS AI':'👤 '+esc(t.sender||'customer')}</span><span>${when}</span></div><div class="body">${esc(t.text)}</div></div>`;
+        return `<div class="turn ${role}"><div class="meta"><span>${role==='assistant'?'LAZUS AI':esc(t.sender||'customer')}</span><span>${when}</span></div><div class="body">${esc(t.text)}</div></div>`;
       }).join('');
       document.getElementById('msgCount').textContent = turns.filter(isToday).length;
     } catch (e) { document.getElementById('feed').innerHTML = `<div class="muted">Feed unavailable (${e.message})</div>`; }
