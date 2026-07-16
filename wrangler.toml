@@ -1,25 +1,31 @@
 name = "lazusai"
-pages_build_output_dir = "dist"
+# The deployed Pages app is the committed landing/ directory: the marketing
+# site (index.html, lazusai-logo.svg), the operator/admin pages, and
+# landing/_worker.js — the Pages worker that handles /api/demo-request,
+# /api/signup, Stripe webhooks and operator auth, and serves everything else
+# as static assets. No build step is required.
+#
+# (scripts/build-worker.mjs + dist/ is the legacy manual-deploy path for the
+# old n8n-era webhook router in src/worker.js; it is NOT what this Pages
+# project publishes, and its CLIENTS_KV binding is not needed here.)
+pages_build_output_dir = "landing"
 compatibility_date = "2024-09-23"
 
-# KV holds routing (route:<id> -> client_id), client config (client:<id>) and
-# dashboard credentials (auth:<id>). Create it once:
-#   npx wrangler kv namespace create CLIENTS_KV
-# then paste the returned id below.
-[[kv_namespaces]]
-binding = "CLIENTS_KV"
-id = "452fbbb7ec0a47febddea03440193f1d"
-
-# The admin dashboard is compiled into the Pages bundle by `npm run build`,
-# which reads admin/dashboard.html into dist/_worker.js. Always run
-# the build before deploy (npm run deploy does both).
-
 [vars]
+# LazusAI Core API on the VPS, exposed via the Cloudflare Tunnel. Used by
+# landing/_worker.js for demo requests, signups and the operator dashboard.
+CORE_API_URL = "https://core.lazusai.com"
+# Legacy vars for the old n8n webhook router (src/worker.js); unused by the
+# landing worker but kept for manual deploys of that path.
 N8N_BASE_URL = "https://n8n.bookistudios.com"
 N8N_WEBHOOK_PATH = "/webhook/lazusai-inbound"
-# LazusAI Core API on the VPS, exposed via the Cloudflare Tunnel. Backs the
-# admin dashboard /api/* data endpoints.
-CORE_API_URL = "https://core.lazusai.com"
 
-# Secret — set with `npx wrangler pages secret put N8N_API_KEY` (do NOT commit it):
-#   N8N_API_KEY   shared secret sent to n8n as X-LazusAI-Key
+# Secrets — set in the Pages project (Settings → Environment variables), or
+# with `npx wrangler pages secret put <NAME>` (do NOT commit them):
+#   LAZUSAI_CORE_KEY       shared key sent to the Core API as X-LazusAI-Key
+#   ADMIN_USER             HTTP Basic auth username for /admin*
+#   ADMIN_PASSWORD         HTTP Basic auth password for /admin*
+#   STRIPE_SECRET_KEY      optional — enables self-serve Stripe signup
+#   STRIPE_WEBHOOK_SECRET  optional — Stripe webhook verification
+#   STRIPE_PRICE_STARTER   optional — monthly subscription price id
+#   STRIPE_PRICE_PRO       optional — monthly subscription price id
