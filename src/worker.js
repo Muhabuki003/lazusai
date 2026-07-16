@@ -25,6 +25,7 @@
  */
 
 import { ADMIN_HTML } from "./admin-html.generated.js";
+import { LANDING_HTML } from "./landing-html.generated.js";
 
 const AUDIO_EXTENSIONS = [".caf", ".m4a", ".amr", ".aac", ".mp3", ".wav"];
 const AUDIO_MIME_PREFIX = "audio/";
@@ -51,7 +52,13 @@ export default {
         return await handleApiProxy(request, env, url);
       }
 
-      return json({ error: "not_found" }, 404);
+      if (pathname === "/" || pathname === "") {
+    return new Response(LANDING_HTML, {
+      headers: { "content-type": "text/html;charset=UTF-8" }
+    });
+  }
+
+  return json({ error: "not_found" }, 404);
     } catch (err) {
       return json({ error: "internal_error", detail: String(err && err.message || err) }, 500);
     }
