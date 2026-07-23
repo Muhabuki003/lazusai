@@ -5,6 +5,9 @@
  *   POST /webhook            Receive BlueBubbles events, identify the client,
  *                            flag voice notes, route to the client's n8n
  *                            workflow.
+ *   POST /webhook/lead       Receive web form leads (name, phone, email,
+ *                            service, message). Requires client_id field.
+ *                            Routes to n8n lead-intake workflow.
  *   GET  /admin/:client_id   Serve the single-file admin dashboard
  *                            (HTTP Basic auth, per-client credentials).
  *   GET  /api/:client_id/*   Authenticated proxy to n8n data endpoints used by
@@ -41,6 +44,10 @@ export default {
 
       if (pathname === "/webhook" && request.method === "POST") {
         return await handleWebhook(request, env, ctx);
+      }
+
+      if (pathname === "/webhook/lead" && request.method === "POST") {
+        return await handleLeadWebhook(request, env, ctx);
       }
 
       if (pathname.startsWith("/admin/")) {
@@ -133,6 +140,85 @@ async function handleWebhook(request, env, ctx) {
   ctx.waitUntil(forward.catch(() => {}));
 
   return json({ ok: true, client_id: clientId, voice_note: parsed.voiceNote });
+}
+
+/* ------------------------------------------------------------- lead webhook */
+
+/**
+ * Handle a form lead submission from a client website.
+ * Accepts JSON or FormData. Required fields: client_id, name, email.
+ * Routes to the per-client lead-intake n8n workflow.
+ */
+async function handleLeadWebhook(request, env, ctx) {
+  let body;
+  const contentType = request.headers.get("Content-Type") || "";
+
+  try {
+    if (contentType.includes("application/json")) {
+      body = await request.json();
+    } else if (contentType.includes("application/x-www-form-urlencoded") ||
+               contentType.includes("multipart/form-data")) {
+      const formData = await request.formData();
+      body = {};
+      for (const [key, value] of formData.entries()) {
+        body[key] = value;
+      }
+    } else {
+      body = await request.json();
+    }
+  } catch {
+    return json({ error: "invalid_body" }, 400);
+  }
+
+  const clientId = body.client_id || "";
+  if (!clientId) {
+    return json({ error: "missing_client_id" }, 400);
+  }
+
+  const name = body.name || body.full_name || "";
+  const email = body.email || "";
+  if (!name && !email) {
+    return json({ error: "missing_required_fields", required: "name or email" }, 400);
+  }
+
+  const config = await getClientConfig(env, clientId);
+  if (!config) {
+    return json({ error: "unknown_client", client_id: clientId }, 404);
+  }
+  if (config.active === false) {
+    return json({ ok: true, ignored: "client_inactive", client_id: clientId });
+  }
+
+  const payload = {
+    client_id: clientId,
+    received_at: new Date().toISOString(),
+    source: "web_form",
+    source_url: request.headers.get("Referer") || body.source_url || "",
+    name,
+    phone: body.phone || "",
+    email,
+    service: body.service || "",
+    address: body.address || body.location || "",
+    message: body.message || body.details || "",
+    raw: body,
+  };
+
+  const leadPath = env.N8N_LEAD_WEBHOOK_PATH || "/webhook/lazusai-lead";
+  const n8nUrl = `${trimSlash(env.N8N_BASE_URL)}${leadPath}/${encodeURIComponent(clientId)}`;
+
+  const forward = fetch(n8nUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-LazusAI-Key": env.N8N_API_KEY || "",
+      "X-LazusAI-Client": clientId,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  ctx.waitUntil(forward.catch(() => {}));
+
+  return json({ ok: true, client_id: clientId, lead: true });
 }
 
 /**

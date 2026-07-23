@@ -15,9 +15,12 @@ Auth: every request must send header X-LazusAI-Key matching LAZUSAI_CORE_KEY
 from __future__ import annotations
 
 import os
+import smtplib
 import sys
 import time
 from datetime import datetime, timezone
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 
 from fastapi import BackgroundTasks, Body, FastAPI, Header, HTTPException
@@ -463,6 +466,63 @@ def webhook(
     background.add_task(_process_inbound, client_id, parsed)
     return {"ok": True, "client_id": client_id, "voice_note": parsed.get("voice_note", False)}
 
+
+# --------------------------------------------------------------- email relay
+
+class EmailPayload(BaseModel):
+    to: list[str]
+    subject: str
+    body: str
+    reply_to: str | None = None
+
+
+@app.post("/email/send")
+def send_email(body: EmailPayload, x_lazusai_key: str | None = Header(default=None)):
+    """Send an email via SMTP. Used by n8n workflows for lead notifications.
+    Configured via env vars:
+      SMTP_HOST (default: smtp.gmail.com)
+      SMTP_PORT (default: 587)
+      SMTP_USER (sender email)
+      SMTP_PASS (app password)
+      SMTP_FROM (from address, defaults to SMTP_USER)
+    """
+    _auth(x_lazusai_key)
+
+    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+    smtp_user = os.environ.get("SMTP_USER", "")
+    smtp_pass = os.environ.get("SMTP_PASS", "")
+    smtp_from = os.environ.get("SMTP_FROM", smtp_user)
+
+    if not smtp_user or not smtp_pass:
+        raise HTTPException(status_code=500, detail="SMTP not configured")
+
+    failures = []
+    for recipient in body.to:
+        try:
+            msg = MIMEMultipart()
+            msg["From"] = smtp_from
+            msg["To"] = recipient
+            msg["Subject"] = body.subject
+            if body.reply_to:
+                msg["Reply-To"] = body.reply_to
+            msg.attach(MIMEText(body.body, "plain", "utf-8"))
+
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as s:
+                s.starttls()
+                s.login(smtp_user, smtp_pass)
+                s.send_message(msg)
+        except Exception as e:
+            failures.append({"recipient": recipient, "error": str(e)[:120]})
+
+    return {
+        "ok": len(failures) == 0,
+        "sent": len(body.to) - len(failures),
+        "failures": failures,
+    }
+
+
+# --------------------------------------------------------------- inbound bot
 
 def _process_inbound(client_id: str, parsed: dict) -> None:
     """WF1 + WF2 pipeline: transcribe -> prompt -> LLM (booking tool-loop) ->

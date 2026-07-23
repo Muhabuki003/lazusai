@@ -1,0 +1,121 @@
+{
+  "name": "LazusAI — WF5 Lead Intake (MG Woodshop)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lazusai-lead",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "lead-webhook",
+      "name": "Lead Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format lead into email body + prepare API calls\nconst lead = $input.first().json;\n\nconst services = lead.service ? `Service: ${lead.service}` : 'Service: Not specified';\nconst phone = lead.phone ? `Phone: ${lead.phone}` : '';\nconst address = lead.address ? `Location: ${lead.address}` : '';\n\nconst emailBody = `NEW LEAD — MG Woodshop & More\n━━━━━━━━━━━━━━━━━━━━━━\n\nName: ${lead.name || 'Not provided'}\nEmail: ${lead.email || 'Not provided'}\n${phone}\n${services}\n${address}\n\nMessage:\n${lead.message || 'No message provided'}\n\n━━━━━━━━━━━━━━━━━━━━━━\nSubmitted: ${lead.received_at || new Date().toISOString()}\nSource: ${lead.source_url || 'mgwoodshopandmore.com'}\n\nReply directly to: ${lead.email || 'N/A'}`;\n\nconst emailSubject = `New Lead: ${lead.name || 'Website Visitor'} — ${lead.service || 'General Inquiry'}`;\n\nreturn {\n  emailTo: [\"Martin9703@gmail.com\", \"M.guerrero9703@gmail.com\"],\n  emailSubject,\n  emailBody,\n  replyTo: lead.email || \"\",\n  lead: lead\n};"
+      },
+      "id": "format-email",
+      "name": "Format Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://core.lazusai.com/email/send",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "to", "value": "={{ $json.emailTo }}" },
+            { "name": "subject", "value": "={{ $json.emailSubject }}" },
+            { "name": "body", "value": "={{ $json.emailBody }}" },
+            { "name": "reply_to", "value": "={{ $json.replyTo }}" }
+          ]
+        },
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-LazusAI-Key", "value": "={{ $env.LAZUSAI_CORE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        }
+      },
+      "id": "send-email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.CORE_API_URL }}/clients/mgwoodshop/leads",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "sender", "value": "={{ $json.lead.email || $json.lead.phone || 'web' }}" },
+            { "name": "name", "value": "={{ $json.lead.name || '' }}" },
+            { "name": "phone", "value": "={{ $json.lead.phone || '' }}" },
+            { "name": "email", "value": "={{ $json.lead.email || '' }}" },
+            { "name": "summary", "value": "={{ $json.lead.service || 'Web lead' }}" },
+            { "name": "message", "value": "={{ $json.lead.message || '' }}" },
+            { "name": "ai_response", "value": "" },
+            { "name": "escalated", "value": false }
+          ]
+        },
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-LazusAI-Key", "value": "={{ $env.LAZUSAI_CORE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        }
+      },
+      "id": "store-lead",
+      "name": "Store Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true, \"lead_processed\": true }"
+      },
+      "id": "respond",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Lead Webhook": {
+      "main": [[ { "node": "Format Email", "type": "main", "index": 0 } ]]
+    },
+    "Format Email": {
+      "main": [[ { "node": "Send Email", "type": "main", "index": 0 } ]]
+    },
+    "Send Email": {
+      "main": [[ { "node": "Store Lead", "type": "main", "index": 0 } ]]
+    },
+    "Store Lead": {
+      "main": [[ { "node": "Respond 200", "type": "main", "index": 0 } ]]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": false,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "pinData": {},
+  "versionId": "wf5-v1"
+}
