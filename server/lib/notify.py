@@ -1,12 +1,13 @@
-"""Outbound notifications: Telegram (owner) and iMessage via BlueBubbles (staff).
+"""Outbound notifications: Telegram (owner) and iMessage via Photon sidecar (staff).
 
 Used by the Core API to alert the team when the bot books an appointment, e.g.
+
 "Josh — Jacob booked a Haircut Thu Jul 2 at 5:00 PM (deposit paid)."
 
 Config comes from the environment (set in /etc/lazusai/core.env):
   TELEGRAM_BOT_TOKEN     shared bot used for owner alerts + daily digest
-  BLUEBUBBLES_URL        base URL of the BlueBubbles server (via tunnel/LAN)
-  BLUEBUBBLES_PASSWORD   BlueBubbles server password
+  PHOTON_SEND_URL        Photon sidecar /send endpoint (default 127.0.0.1:8789)
+  PHOTON_SIDECAR_TOKEN   sidecar auth token
 
 Every send is best-effort and returns a bool; a booking is never blocked by a
 failed notification.
@@ -17,9 +18,14 @@ import os
 
 import httpx
 
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-BLUEBUBBLES_URL = os.environ.get("BLUEBUBBLES_URL", "")
-BLUEBUBBLES_PASSWORD = os.environ.get("BLUEBUBBLES_PASSWORD", "")
+
+def _env(key: str, default: str = "") -> str:
+    return os.environ.get(key, default)
+
+
+TELEGRAM_BOT_TOKEN = _env("TELEGRAM_BOT_TOKEN")
+PHOTON_SEND_URL = _env("PHOTON_SEND_URL", "http://127.0.0.1:8789")
+PHOTON_SIDECAR_TOKEN = _env("PHOTON_SIDECAR_TOKEN")
 REQUEST_TIMEOUT = 15.0
 
 
@@ -37,15 +43,18 @@ def send_telegram(chat: str, text: str, *, http_client: httpx.Client | None = No
 
 
 def send_imessage(phone: str, text: str, *, http_client: httpx.Client | None = None) -> bool:
-    """Send an iMessage to a phone number via the BlueBubbles server."""
-    if not BLUEBUBBLES_URL or not phone:
+    """Send an iMessage to a phone number via the Photon sidecar /send."""
+    if not PHOTON_SEND_URL or not phone:
         return False
-    chat_guid = phone if phone.startswith("iMessage;") else f"iMessage;-;{phone}"
-    url = f"{BLUEBUBBLES_URL.rstrip('/')}/api/v1/message/text"
-    params = {"password": BLUEBUBBLES_PASSWORD} if BLUEBUBBLES_PASSWORD else {}
-    body = {"chatGuid": chat_guid, "message": text, "method": "apple-script"}
+    space_id = phone if phone.startswith("any;-;") else f"any;-;{phone}"
+    url = f"{PHOTON_SEND_URL.rstrip('/')}/send"
     try:
-        resp = _post(url, params=params, json=body, http_client=http_client)
+        resp = _post(
+            url,
+            json={"spaceId": space_id, "text": text, "format": "text"},
+            headers={"x-hermes-sidecar-token": PHOTON_SIDECAR_TOKEN},
+            http_client=http_client,
+        )
         return resp.status_code < 300
     except Exception:  # noqa: BLE001
         return False
@@ -125,8 +134,8 @@ def format_when(date_iso: str, start_hhmm: str) -> str:
     return (day + " " + clock).strip()
 
 
-def _post(url, *, json=None, params=None, http_client=None):
+def _post(url, *, json=None, params=None, headers=None, http_client=None):
     if http_client is not None:
-        return http_client.post(url, json=json, params=params)
+        return http_client.post(url, json=json, params=params, headers=headers)
     with httpx.Client(timeout=REQUEST_TIMEOUT) as c:
-        return c.post(url, json=json, params=params)
+        return c.post(url, json=json, params=params, headers=headers)

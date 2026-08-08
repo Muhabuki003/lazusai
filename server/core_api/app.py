@@ -29,7 +29,7 @@ from pydantic import BaseModel
 
 # Make the shared libs importable whether run from repo root or server/.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import bookings, cf_kv, chroma_store, clients, inbound, nim_client, notify, payments, signups  # noqa: E402
+from lib import bookings, cf_kv, chroma_store, clients, inbound, notify, ollama_client, payments, signups  # noqa: E402
 
 CORE_KEY = os.environ.get("LAZUSAI_CORE_KEY", "")
 
@@ -306,7 +306,7 @@ def summary(client_id: str, x_lazusai_key: str | None = Header(default=None)):
             f"Business: {cfg['business_name']}\nLeads captured: {len(leads)}\n"
             f"Conversation log (last 24h):\n{transcript}")},
     ]
-    result = nim_client.chat(messages, temperature=0.3, max_tokens=350)
+    result = ollama_client.chat(messages, temperature=0.3, max_tokens=350)
     return {
         "summary": result.text,
         "model": result.model,
@@ -556,8 +556,8 @@ def _process_inbound(client_id: str, parsed: dict) -> None:
 
     def llm(messages: list[dict]) -> str:
         try:
-            return nim_client.chat(messages, temperature=0.4, max_tokens=500).text.strip()
-        except nim_client.NimUnavailable:
+            return ollama_client.chat(messages, temperature=0.4, max_tokens=500).text.strip()
+        except ollama_client.LlmUnavailable:
             return ""
 
     messages = [{"role": "system", "content": system_prompt}, *recent,
@@ -632,7 +632,7 @@ def _process_inbound(client_id: str, parsed: dict) -> None:
 
     reply = inbound.clean_sms(inbound.strip_directive(reply)) or inbound.FALLBACK_REPLY
 
-    inbound.send_imessage_reply(chat_guid, reply)
+    inbound.send_photon_reply(chat_guid, reply)
 
     chroma_store.log_turn(client_id, "user", text, sender=sender)
     chroma_store.log_turn(client_id, "assistant", reply, sender=sender)

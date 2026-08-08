@@ -76,7 +76,8 @@ def rebuild_index() -> dict:
     for cfg in list_clients():
         cid = cfg["client_id"]
         ids.append(cid)
-        for key in (cfg.get("apple_id_number"), cfg.get("bluebubbles_chat_guid")):
+        for key in (cfg.get("apple_id_number"), cfg.get("bluebubbles_chat_guid"),
+                    cfg.get("photon_space_id")):
             if key:
                 routes[key] = cid
     index = {

@@ -333,27 +333,33 @@ def escalated(cfg: dict, text: str) -> bool:
     return any(k.lower() in hay for k in cfg.get("escalation_keywords") or [])
 
 
-# ---------------------------------------------------------------- BlueBubbles
+# ---------------------------------------------------------------- Photon send
 
-def send_imessage_reply(chat_guid: str, message: str) -> bool:
-    """Deliver the reply over iMessage via the BlueBubbles REST API.
+def send_photon_reply(chat_guid: str, message: str) -> bool:
+    """Deliver the reply over iMessage via the Photon sidecar /send.
 
-    Returns False (without raising) when BlueBubbles isn't configured yet, so
+    The sidecar runs on the LazusAI server (or the relay bridge on the
+    Hermes host) — URL via PHOTON_SEND_URL, auth via PHOTON_SIDECAR_TOKEN.
+
+    Returns False (without raising) when the sidecar isn't reachable, so
     the pipeline still logs turns during pre-launch testing.
     """
-    bb = _env("BLUEBUBBLES_URL").rstrip("/")
-    pw = _env("BLUEBUBBLES_PASSWORD")
-    if not bb or not chat_guid:
+    sidecar = _env("PHOTON_SEND_URL").rstrip("/")
+    token = _env("PHOTON_SIDECAR_TOKEN")
+    if not sidecar or not chat_guid:
         return False
     try:
         resp = httpx.post(
-            f"{bb}/api/v1/message/text",
-            params={"password": pw},
+            f"{sidecar}/send",
+            headers={
+                "Content-Type": "application/json",
+                "x-hermes-sidecar-token": token,
+                "x-lazusai-key": _env("LAZUSAI_BRIDGE_KEY", "test-key-123"),
+            },
             json={
-                "chatGuid": chat_guid,
-                "tempGuid": f"lazusai-{int(datetime.now().timestamp() * 1000)}",
-                "message": message,
-                "method": "private-api",
+                "spaceId": chat_guid,
+                "text": message,
+                "format": "text",
             },
             timeout=REQUEST_TIMEOUT,
         )

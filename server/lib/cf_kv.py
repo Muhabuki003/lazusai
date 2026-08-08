@@ -49,7 +49,8 @@ def push_client(config: dict, dashboard_password: str | None = None) -> bool:
     if not configured():
         return False
     cid = config["client_id"]
-    for ident in (config.get("apple_id_number"), config.get("bluebubbles_chat_guid")):
+    for ident in (config.get("apple_id_number"), config.get("bluebubbles_chat_guid"),
+                  config.get("photon_space_id")):
         if ident:
             _put(f"route:{ident}", cid)
     _put(f"client:{cid}", json.dumps(config))

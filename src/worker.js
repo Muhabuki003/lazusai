@@ -27,7 +27,7 @@
  *   N8N_API_KEY  secret, sent as X-LazusAI-Key to n8n + data API.
  */
 
-import { ADMIN_HTML } from "./admin-html.generated.js";
+import { ADMIN_HTML, LANDING_HTML } from "./admin-html.generated.js";
 
 const AUDIO_EXTENSIONS = [".caf", ".m4a", ".amr", ".aac", ".mp3", ".wav"];
 const AUDIO_MIME_PREFIX = "audio/";
@@ -56,6 +56,13 @@ export default {
 
       if (pathname.startsWith("/api/")) {
         return await handleApiProxy(request, env, url);
+      }
+
+      // Serve static landing page
+      if (pathname === "/" || pathname === "/index.html") {
+        return new Response(LANDING_HTML, {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
       }
 
       return json({ error: "not_found" }, 404);
@@ -88,58 +95,22 @@ async function handleWebhook(request, env, ctx) {
     return json({ ok: true, ignored: "from_me" });
   }
 
-  const parsed = parseMessage(message);
-  if (!parsed.sender && !parsed.chatGuid) {
-    return json({ error: "no_sender" }, 422);
-  }
-
-  // Identify which client this inbound belongs to. Try chat guid first (most
-  // specific), then the sender's phone/handle, then any apple id we can see.
-  const clientId = await identifyClient(env, [
-    parsed.chatGuid,
-    parsed.sender,
-    normalizePhone(parsed.sender),
-  ]);
-
-  if (!clientId) {
-    // Unknown number — drop silently (multi-tenant isolation: never guess).
-    return json({ ok: true, ignored: "unknown_client", sender: parsed.sender });
-  }
-
-  const config = await getClientConfig(env, clientId);
-  if (config && config.active === false) {
-    return json({ ok: true, ignored: "client_inactive", client_id: clientId });
-  }
-
-  const payload = {
-    client_id: clientId,
-    received_at: new Date().toISOString(),
-    sender: parsed.sender,
-    chat_guid: parsed.chatGuid,
-    message: parsed.text,
-    voice_note: parsed.voiceNote,
-    attachments: parsed.attachments,
-    message_guid: parsed.guid,
-    raw_type: type,
-  };
-
-  // Route to the client's parameterized n8n inbound workflow.
-  const n8nUrl = `${trimSlash(env.N8N_BASE_URL)}${env.N8N_WEBHOOK_PATH || "/webhook/lazusai-inbound"}/${encodeURIComponent(clientId)}`;
-
-  const forward = fetch(n8nUrl, {
+  // Forward the raw event verbatim to the Core API — the core routes the
+  // sender to its client, runs the booking pipeline, and replies. No edge
+  // routing / KV / n8n involved (single source of truth = core's index).
+  const resp = await fetch(`${trimSlash(env.CORE_API_URL)}/webhook`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-LazusAI-Key": env.N8N_API_KEY || "",
-      "X-LazusAI-Client": clientId,
+      "X-LazusAI-Key": env.LAZUSAI_CORE_KEY || "",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(event),
   });
-
-  // Don't block the BlueBubbles webhook on n8n processing.
-  ctx.waitUntil(forward.catch(() => {}));
-
-  return json({ ok: true, client_id: clientId, voice_note: parsed.voiceNote });
+  const text = await resp.text();
+  return new Response(text, {
+    status: resp.ok ? 200 : 502,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 /* ------------------------------------------------------------- lead webhook */
