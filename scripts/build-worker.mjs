@@ -27,4 +27,9 @@ const bundle = workerSrc.replace(
 
 writeFileSync(join(dist, "_worker.js"), bundle);
 
-console.log(`Built dist/_worker.js (${bundle.length} bytes) — ready for wrangler pages deploy`);
+// Also publish the plain landing HTML so the build output dir always
+// contains a static index.html alongside the worker (Pages builds expect
+// at least one static asset; the worker serves LANDING_HTML inline anyway).
+writeFileSync(join(dist, "index.html"), landingHtml);
+
+console.log(`Built dist/_worker.js (${bundle.length} bytes) + dist/index.html — ready for wrangler pages deploy`);
