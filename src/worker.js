@@ -58,11 +58,11 @@ export default {
         return await handleApiProxy(request, env, url);
       }
 
-      // Serve static landing page
-      if (pathname === "/" || pathname === "/index.html") {
-        return new Response(LANDING_HTML, {
-          headers: { "content-type": "text/html; charset=utf-8" },
-        });
+      // Serve the static front end (git builds get an ASSETS binding; the
+      // multi-page site lives in dist/). Fall back to the inlined landing.
+      if (request.method === "GET") {
+        const page = await serveStatic(request, env);
+        if (page) return page;
       }
 
       return json({ error: "not_found" }, 404);
@@ -71,6 +71,26 @@ export default {
     }
   },
 };
+
+/* --------------------------------------------------------------- static */
+async function serveStatic(request, env) {
+  // 1) Assets binding — present on git-connected Pages builds, serves the
+  //    multi-page front end (index.html + *.dc.html siblings) from dist/.
+  if (env.ASSETS) {
+    try {
+      const res = await env.ASSETS.fetch(request);
+      if (res && res.status === 200) return res;
+    } catch (e) { /* fall through to the inlined fallback */ }
+  }
+  // 2) Inlined landing as a fallback for the root page (API-only deploys).
+  const { pathname } = new URL(request.url);
+  if (pathname === "/" || pathname === "/index.html") {
+    return new Response(LANDING_HTML, {
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+  }
+  return null;
+}
 
 /* ------------------------------------------------------------------ webhook */
 
