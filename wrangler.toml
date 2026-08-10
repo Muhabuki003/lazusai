@@ -14,12 +14,8 @@ id = "452fbbb7ec0a47febddea03440193f1d"
 # which reads admin/dashboard.html into dist/_worker.js. Always run
 # the build before deploy (npm run deploy does both).
 
-[vars]
-N8N_BASE_URL = "https://n8n.bookistudios.com"
-N8N_WEBHOOK_PATH = "/webhook/lazusai-inbound"
-# LazusAI Core API on the VPS, exposed via the Cloudflare Tunnel. Backs the
-# admin dashboard /api/* data endpoints.
-CORE_API_URL = "https://core.lazusai.com"
-
-# Secret — set with `npx wrangler pages secret put N8N_API_KEY` (do NOT commit it):
-#   N8N_API_KEY   shared secret sent to n8n as X-LazusAI-Key
+# Env vars are configured in the Cloudflare dashboard (project → Settings →
+# Environment variables) — the source of truth for ALL deployments. Keeping
+# a [vars] block here would REPLACE the dashboard env on git builds and drop
+# LAZUSAI_CORE_KEY / N8N_API_KEY (breaking /webhook and /api/*). Do not add
+# [vars] back.
