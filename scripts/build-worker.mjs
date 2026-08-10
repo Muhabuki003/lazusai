@@ -1,7 +1,7 @@
 // Bundles admin/dashboard.html + landing/index.html + src/worker.js into dist/_worker.js
 // for Cloudflare Pages deployment. Both HTML files are inlined into the worker bundle
 // because the Pages API deployment path does not support env.ASSETS.
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, cpSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -27,4 +27,17 @@ const bundle = workerSrc.replace(
 
 writeFileSync(join(dist, "_worker.js"), bundle);
 
-console.log(`Built dist/_worker.js (${bundle.length} bytes) — ready for wrangler pages deploy`);
+// Publish the static front end (multi-page site) so git-connected Pages
+// builds serve it via the ASSETS binding. The old landing stays as the
+// inlined fallback for the root route.
+writeFileSync(join(dist, "index.html"), landingHtml);
+if (existsSync(join(root, "frontend"))) {
+  cpSync(join(root, "frontend"), dist, { recursive: true });
+  // index.html from frontend/ (the new site) wins over the old landing copy.
+  writeFileSync(
+    join(dist, "index.html"),
+    readFileSync(join(root, "frontend", "index.html"), "utf8"),
+  );
+}
+
+console.log(`Built dist/_worker.js (${bundle.length} bytes) + front end → dist/ — ready for deploy`);

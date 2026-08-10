@@ -18,6 +18,7 @@ import os
 import smtplib
 import sys
 import time
+import json
 from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -524,6 +525,77 @@ def send_email(body: EmailPayload, x_lazusai_key: str | None = Header(default=No
 
 # --------------------------------------------------------------- inbound bot
 
+def _extract_booking(client_id: str, cfg: dict, convo_turns: list, sender: str) -> dict | None:
+    """Deterministic booking from the conversation.
+
+    The chat model often confirms a booking in plain text without emitting a
+    structured directive. This focused extraction call pulls service / date /
+    start / name from the recent turns and creates the booking through the
+    normal validated path (conflict checks + staff alerts included).
+    Returns the booking dict, or None when the customer hasn't confirmed all
+    fields (or the slot is taken / invalid).
+    """
+    names = [s.get("name", "") for s in cfg.get("services_matrix") or []]
+    if not names:
+        names = cfg.get("services") or []
+    convo = "\n".join(
+        f"{t.get('role', 'user')}: {t.get('text', '')}" for t in convo_turns
+    )
+    sys_prompt = (
+        "You extract appointment details from a customer-service conversation. "
+        'Reply with ONLY JSON: {"service": "...", "date": "YYYY-MM-DD", '
+        '"start": "HH:MM (24h)", "name": "..."} — or {"ok": false} when the '
+        "customer has NOT yet confirmed a service AND a day AND a time AND their name.\n"
+        "RULES:\n"
+        "- When the assistant offers a specific day+time and the customer accepts "
+        "(e.g. '10am works', 'yes', 'sounds good', 'Tuesday is fine'), that IS "
+        "confirmation of that day and time.\n"
+        f"- Resolve relative/named days to YYYY-MM-DD. Today is {inbound.today_iso()}. "
+        "A 'cleaning' maps to the 'Cleaning' service.\n"
+        "- The customer's name counts once they state it ('I'm Jacob', 'my name is...').\n"
+        "- Never invent a day or time the assistant did not offer and the customer "
+        "did not accept.\n"
+        f"Available services: {', '.join(names)}.\n"
+        'Example output: {"service": "Cleaning", "date": "2026-08-11", '
+        '"start": "10:00", "name": "Jacob"}'
+    )
+    try:
+        out = ollama_client.chat(
+            [{"role": "system", "content": sys_prompt},
+             {"role": "user", "content": convo}],
+            temperature=0.0, max_tokens=150,
+        ).text.strip()
+        start, end = out.find("{"), out.rfind("}")
+        if start == -1 or end == -1:
+            return None
+        data = json.loads(out[start:end + 1])
+    except Exception:  # noqa: BLE001
+        return None
+
+    if data.get("ok") is False:
+        return None
+    svc = str(data.get("service") or "").strip()
+    date = str(data.get("date") or "").strip()
+    start_t = str(data.get("start") or "").strip()
+    name = str(data.get("name") or "").strip()
+    if not (svc and date and start_t and name) or svc not in names:
+        return None
+    try:
+        r = create_booking(
+            client_id,
+            NewBooking(
+                service=svc, staff="", date=date, start=start_t,
+                customer_name=name, customer_phone=sender,
+                notes=str(data.get("notes") or ""), source="bot",
+            ),
+            x_lazusai_key=CORE_KEY,
+        )
+        return r.get("booking") or r
+    except HTTPException:
+        # 409 slot_taken / 422 invalid — leave the conversation to continue.
+        return None
+
+
 def _process_inbound(client_id: str, parsed: dict) -> None:
     """WF1 + WF2 pipeline: transcribe -> prompt -> LLM (booking tool-loop) ->
     reply via BlueBubbles -> log turns -> lead capture + owner alert."""
@@ -556,7 +628,7 @@ def _process_inbound(client_id: str, parsed: dict) -> None:
 
     def llm(messages: list[dict]) -> str:
         try:
-            return ollama_client.chat(messages, temperature=0.4, max_tokens=500).text.strip()
+            return ollama_client.chat(messages, temperature=0.2, max_tokens=500).text.strip()
         except ollama_client.LlmUnavailable:
             return ""
 
@@ -565,6 +637,7 @@ def _process_inbound(client_id: str, parsed: dict) -> None:
     reply = llm(messages)
 
     # Booking tool-loop (max 2 iterations), mirroring the n8n orchestrator.
+    booked_via_directive = False
     for _ in range(2):
         if not cfg.get("booking_enabled"):
             break
@@ -605,6 +678,7 @@ def _process_inbound(client_id: str, parsed: dict) -> None:
                     x_lazusai_key=CORE_KEY,
                 )
                 pay = r.get("payment") or {}
+                booked_via_directive = True
                 extra = ""
                 if pay.get("required") and pay.get("url"):
                     label = (f"deposit of ${pay['amount']}" if pay.get("model") == "deposit"
@@ -629,6 +703,21 @@ def _process_inbound(client_id: str, parsed: dict) -> None:
                     {"role": "assistant", "content": reply},
                     {"role": "system", "content": tool_msg}]
         reply = llm(messages) or reply
+
+    # Deterministic booking fallback: when the chat model confirms in plain
+    # text without a directive, a focused extraction call books the slot.
+    if cfg.get("booking_enabled") and not booked_via_directive:
+        convo_turns = [*recent,
+                       {"role": "user", "text": text},
+                       {"role": "assistant", "text": reply}]
+        booking = _extract_booking(client_id, cfg, convo_turns, sender)
+        if booking and booking.get("id"):
+            booked_via_directive = True
+            reply = (
+                f"✅ You're booked! {booking.get('service')} on "
+                f"{booking.get('date')} at {booking.get('start')} for "
+                f"{booking.get('customer_name')}. See you then!"
+            )
 
     reply = inbound.clean_sms(inbound.strip_directive(reply)) or inbound.FALLBACK_REPLY
 

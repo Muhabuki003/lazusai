@@ -224,16 +224,21 @@ def build_booking_block(cfg: dict, sender: str, today: str) -> str:
         f"Team: {team}" if team else "",
         pay_note,
         "\nTo help a customer book, gather: service, preferred day (resolve to a "
-        "YYYY-MM-DD date), optional staff, their name, and phone.",
+        "YYYY-MM-DD date), optional staff, and their name.",
+        f"The customer's phone number is {sender} — you already have it. NEVER ask for it.",
+        "When a customer asks about a specific day, you MUST check it first: end "
+        "your reply with EXACTLY one line [[AVAIL service=\"<name>\" date=\"<YYYY-MM-DD>\" "
+        "staff=\"<name or empty>\"]] and then offer only the times it returns. "
+        "NEVER claim a day is open or closed without an AVAIL result. "
+        "When offering times, always state the weekday AND the date (e.g. "
+        "\"Tuesday, August 11th at 10:00 AM\") so there is no ambiguity.",
         "When you need to see open times, end your reply with EXACTLY one line:",
         '[[AVAIL service="<name>" date="<YYYY-MM-DD>" staff="<name or empty>"]]',
-        "When the customer has confirmed a specific service, date, time, and given "
-        "their name, end your reply with EXACTLY one line:",
-        f'[[BOOK service="<name>" staff="<name or empty>" date="<YYYY-MM-DD>" '
-        f'start="<HH:MM 24h>" name="<customer name>" phone="{sender}" notes="<optional>"]]',
-        "Never invent open times — only offer times returned by an AVAIL result. "
-        "Do not show the [[...]] line's raw text as the whole message; put your "
-        "normal reply first, then the directive on its own final line.",
+        "Once the customer has picked a service, a day, a time, and given their "
+        "name, simply confirm warmly in plain text — the booking is created for "
+        "you automatically. Do not invent or restate dates that were not agreed; "
+        "repeat the exact day and time the customer chose.",
+        "Never invent open times — only offer times returned by an AVAIL result.",
     ]
     return "\n".join(p for p in parts if p)
 
