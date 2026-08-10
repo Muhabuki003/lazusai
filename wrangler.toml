@@ -14,8 +14,12 @@ id = "452fbbb7ec0a47febddea03440193f1d"
 # which reads admin/dashboard.html into dist/_worker.js. Always run
 # the build before deploy (npm run deploy does both).
 
-# Env vars are configured in the Cloudflare dashboard (project → Settings →
-# Environment variables) — the source of truth for ALL deployments. Keeping
-# a [vars] block here would REPLACE the dashboard env on git builds and drop
-# LAZUSAI_CORE_KEY / N8N_API_KEY (breaking /webhook and /api/*). Do not add
-# [vars] back.
+# Env vars for git builds come from two places:
+#  - [vars] below (non-secret) — the git sync REPLACES plain_text env vars
+#    on the project with whatever is here.
+#  - secret_text env vars configured on the project (ADMIN_PASSWORD,
+#    LAZUSAI_CORE_KEY, N8N_API_KEY) — those survive the git sync.
+[vars]
+CORE_API_URL = "https://core.lazusai.com"
+N8N_BASE_URL = "https://n8n.bookistudios.com"
+N8N_WEBHOOK_PATH = "/webhook/lazusai-inbound"
