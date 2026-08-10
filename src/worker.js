@@ -81,7 +81,16 @@ async function serveStatic(request, env) {
   if (env.ASSETS) {
     try {
       const u = new URL(request.url);
-      const res = await env.ASSETS.fetch(new Request(u.origin + u.pathname));
+      // Clean public URLs → bundled front-end files (no .dc.html in the bar).
+      const CLEAN = {
+        "/login": "/Login.dc.html",
+        "/pricing": "/Pricing.dc.html",
+        "/dashboard": "/Dashboard.dc.html",
+        "/industries": "/Industries.dc.html",
+        "/contact": "/Contact.dc.html",
+      };
+      const target = CLEAN[u.pathname] || u.pathname;
+      const res = await env.ASSETS.fetch(new Request(u.origin + target));
       if (res && res.status === 200) return res;
     } catch (e) { /* fall through to the inlined fallback */ }
   }
