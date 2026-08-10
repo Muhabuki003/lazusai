@@ -58,20 +58,6 @@ export default {
         return await handleApiProxy(request, env, url);
       }
 
-      if (pathname === "/debug-assets") {
-        const p = url.searchParams.get("path") || "/";
-        try {
-          const r = await env.ASSETS.fetch(new Request("https://lazusai.com" + p));
-          const buf = await r.arrayBuffer();
-          return json({
-            hasAssets: !!env.ASSETS, status: r.status,
-            ct: r.headers.get("content-type"), bytes: buf.byteLength,
-          });
-        } catch (e) {
-          return json({ error: String((e && e.message) || e), hasAssets: !!env.ASSETS }, 500);
-        }
-      }
-
       // Serve the static front end (git builds get an ASSETS binding; the
       // multi-page site lives in dist/). Fall back to the inlined landing.
       if (request.method === "GET") {
@@ -90,9 +76,12 @@ export default {
 async function serveStatic(request, env) {
   // 1) Assets binding — present on git-connected Pages builds, serves the
   //    multi-page front end (index.html + *.dc.html siblings) from dist/.
+  //    NOTE: pass a freshly-constructed Request (origin + pathname); passing
+  //    the original request made ASSETS return 404 for asset paths.
   if (env.ASSETS) {
     try {
-      const res = await env.ASSETS.fetch(request);
+      const u = new URL(request.url);
+      const res = await env.ASSETS.fetch(new Request(u.origin + u.pathname));
       if (res && res.status === 200) return res;
     } catch (e) { /* fall through to the inlined fallback */ }
   }
