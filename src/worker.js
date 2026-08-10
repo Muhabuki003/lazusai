@@ -88,6 +88,8 @@ async function serveStatic(request, env) {
         "/dashboard": "/Dashboard.dc.html",
         "/industries": "/Industries.dc.html",
         "/contact": "/Contact.dc.html",
+        "/terms": "/terms.html",
+        "/privacy": "/privacy.html",
       };
       const target = CLEAN[u.pathname] || u.pathname;
       const res = await env.ASSETS.fetch(new Request(u.origin + target));

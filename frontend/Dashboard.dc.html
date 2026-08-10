@@ -404,6 +404,31 @@ document.addEventListener('DOMContentLoaded', async function() {
   }, 500);
   setTimeout(inject, 2000);
 })();
+;
+/*lazusai-a11y*/
+;(function () {
+  function apply() {
+    if (!document.body) return false;
+    var s = document.createElement('style');
+    s.id = 'lazusai-a11y';
+    s.textContent = ':focus-visible { outline: 3px solid #0a84ff !important; outline-offset: 2px !important; border-radius: 4px !important; }\n  button, [role="button"], input[type="submit"], [data-submit] { min-height: 44px !important; }\n  [style*="color:#b3b3ae"], [style*="color: #b3b3ae"] { color: #7d7d7d !important; }\n  [style*="color:rgba(19, 25, 34, 0.42)"] { color: #5c5c5c !important; }\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }\n}\n';
+    (document.head || document.documentElement).appendChild(s);
+    var e = document.querySelector('[data-email]'); if (e) e.setAttribute('aria-label', 'Work email');
+    var p = document.querySelector('[data-pass]'); if (p) p.setAttribute('aria-label', 'Password');
+    var b = document.querySelector('[data-submit]'); if (b) b.setAttribute('aria-label', 'Sign in');
+    document.querySelectorAll('a, button').forEach(function (el) {
+      if (!el.getAttribute('aria-label') && (!el.textContent || !el.textContent.trim())) {
+        el.setAttribute('aria-label', 'Link');
+      }
+    });
+    return true;
+  }
+  var tries = 0;
+  var iv = setInterval(function () {
+    if (apply() || ++tries > 80) clearInterval(iv);
+  }, 500);
+  setTimeout(apply, 2500);
+})();
 </script>
 
   <script type="__bundler/manifest">
