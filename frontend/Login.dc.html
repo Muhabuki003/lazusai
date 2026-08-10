@@ -424,6 +424,23 @@ document.addEventListener('DOMContentLoaded', async function() {
   }, 500);
   setTimeout(apply, 2500);
 })();
+;
+/*lazusai-favicon*/
+;(function () {
+  function addFav() {
+    var h = document.head || document.documentElement;
+    if (!h || document.querySelector('link[rel="icon"][href="/logo.png"]')) return false;
+    var l = document.createElement('link');
+    l.rel = 'icon'; l.type = 'image/png'; l.href = '/logo.png';
+    h.appendChild(l);
+    return true;
+  }
+  var tries = 0;
+  var iv = setInterval(function () {
+    if (addFav() || ++tries > 60) clearInterval(iv);
+  }, 500);
+  setTimeout(addFav, 2000);
+})();
 </script>
 
   <script type="__bundler/manifest">
