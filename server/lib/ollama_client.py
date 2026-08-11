@@ -50,11 +50,39 @@ def chat(
     max_tokens: int = 700,
     num_ctx: int = DEFAULT_CTX,
 ) -> ChatResult:
-    """Run a chat completion through the local model chain.
+    """Run a chat completion — DeepSeek API first when configured, then the
+    local Ollama chain. Returns the first successful completion + model."""
 
-    `messages` is a standard OpenAI-style list of {role, content} dicts.
-    Returns the first successful completion and which model produced it.
-    """
+    # ---- DeepSeek cloud (fast path) ------------------------------------
+    ds_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
+    if ds_key:
+        ds_base = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1").rstrip("/")
+        ds_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+        try:
+            with httpx.Client(timeout=60) as client:
+                resp = client.post(
+                    f"{ds_base}/chat/completions",
+                    headers={"Authorization": f"Bearer {ds_key}"},
+                    json={
+                        "model": ds_model,
+                        "messages": messages,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        "stream": False,
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                text = (data.get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
+                if text:
+                    log.info("DeepSeek completion (%s, %ss)", ds_model,
+                             round(resp.elapsed.total_seconds(), 2))
+                    return ChatResult(text=text, model=f"deepseek:{ds_model}")
+                log.warning("DeepSeek returned empty completion, falling back to Ollama")
+        except Exception as exc:  # noqa: BLE001 — fall through to local models
+            log.warning("DeepSeek failed (%s), falling back to Ollama", exc)
+
+    # ---- Local Ollama chain --------------------------------------------
     models = list(chain) if chain is not None else list(DEFAULT_CHAIN)
 
     last_error: Exception | None = None

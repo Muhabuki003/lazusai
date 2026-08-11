@@ -468,6 +468,33 @@ def webhook(
     return {"ok": True, "client_id": client_id, "voice_note": parsed.get("voice_note", False)}
 
 
+@app.post("/webhook/sync")
+def webhook_sync(
+    event: dict = Body(...),
+    x_lazusai_key: str | None = Header(default=None),
+):
+    """Synchronous inbound for the BlueBubbles (Mac) bridge: processes the
+    message and returns the bot's reply text so the bridge can send it via
+    iMessage. Same pipeline as /webhook, but no Photon send + no background."""
+    _auth(x_lazusai_key)
+
+    parsed = inbound.parse_webhook(event)
+    if parsed.get("ignored"):
+        return {"ok": True, "ignored": parsed["ignored"]}
+
+    index = clients.rebuild_index()
+    client_id = inbound.route_client(parsed, index.get("routes") or {})
+    if not client_id:
+        return {"ok": True, "ignored": "unknown_client", "sender": parsed.get("sender")}
+
+    cfg = clients.load_client(client_id)
+    if cfg.get("active") is False:
+        return {"ok": True, "ignored": "client_inactive", "client_id": client_id}
+
+    reply = _process_inbound(client_id, parsed, return_reply=True)
+    return {"ok": True, "client_id": client_id, "reply": reply or ""}
+
+
 # --------------------------------------------------------------- email relay
 
 class EmailPayload(BaseModel):
@@ -596,9 +623,11 @@ def _extract_booking(client_id: str, cfg: dict, convo_turns: list, sender: str) 
         return None
 
 
-def _process_inbound(client_id: str, parsed: dict) -> None:
+def _process_inbound(client_id: str, parsed: dict, return_reply: bool = False) -> str | None:
     """WF1 + WF2 pipeline: transcribe -> prompt -> LLM (booking tool-loop) ->
-    reply via BlueBubbles -> log turns -> lead capture + owner alert."""
+    reply. Normally sends the reply via the Photon sidecar (background task);
+    with return_reply=True it skips sending and returns the reply text (used
+    by the BlueBubbles bridge for the Mac transport)."""
     cfg = clients.load_client(client_id)
     sender = parsed.get("sender", "")
     chat_guid = parsed.get("chat_guid", "")
@@ -720,6 +749,11 @@ def _process_inbound(client_id: str, parsed: dict) -> None:
             )
 
     reply = inbound.clean_sms(inbound.strip_directive(reply)) or inbound.FALLBACK_REPLY
+
+    if return_reply:
+        chroma_store.log_turn(client_id, "user", text, sender=sender)
+        chroma_store.log_turn(client_id, "assistant", reply, sender=sender)
+        return reply
 
     inbound.send_photon_reply(chat_guid, reply)
 
