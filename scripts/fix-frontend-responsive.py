@@ -145,10 +145,219 @@ LOGIN_FIXES = [
     ),
 ]
 
+# The dashboard's Calendar and Bookings panels are desktop layouts wrapped in
+# overflow-x:auto -- a 880px seven-column week grid and a 760px seven-column
+# table. On a phone that means a sideways drag over content that reads as cut
+# off, so below 720px each swaps to a layout built for the width: the calendar
+# becomes a week strip plus a single-day agenda, and the bookings table becomes
+# one card per booking. Desktop rendering is untouched.
+DASHBOARD_MOBILE_JS = r"""  panelWidth() {
+    // Width a panel actually gets. Measured off <main>, which is always
+    // visible -- an inactive panel is display:none and would measure 0.
+    // clientWidth includes padding, and each panel sits behind a 1px border.
+    const main = document.querySelector('main');
+    if (!main) return window.innerWidth;
+    const cs = getComputedStyle(main);
+    return main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
+  }
+
+  responsive() {
+    // Swap on the real fit rather than a guessed viewport width, so each panel
+    // changes over exactly when its desktop layout would start scrolling
+    // sideways. Re-render only on a crossing, so ordinary resizing (or a mobile
+    // URL bar collapsing) does not rebuild the DOM.
+    let cal = this.panelWidth() < CAL_MIN, bk = this.panelWidth() < BK_MIN;
+    window.addEventListener('resize', () => {
+      const w = this.panelWidth(), c = w < CAL_MIN, k = w < BK_MIN;
+      if (c !== cal) { cal = c; this.renderCal(); }
+      if (k !== bk) { bk = k; this.renderBookings(); }
+    });
+  }
+
+  renderCalMobile(grid) {
+    const e = this.esc, days = this.weekDates();
+    const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const todayKey = new Date().toDateString();
+    const title = document.querySelector('[data-caltitle]');
+    if (title) title.textContent = days[0].toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' – ' + days[6].toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
+    // Sample data only covers the current week, matching the desktop grid.
+    const live = this.weekOffset === 0;
+    const forDay = i => live ? BOOKINGS.filter(b => b.off === i).sort((a, b) => a.start.localeCompare(b.start)) : [];
+    if (this.calDay == null) {
+      const t = days.findIndex(d => d.toDateString() === todayKey);
+      this.calDay = t === -1 ? 0 : t;
+    }
+    const sel = this.calDay;
+
+    let html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:12px;border-bottom:1px solid #e6e6e2">';
+    days.forEach((d, i) => {
+      const isToday = d.toDateString() === todayKey, on = i === sel, n = forDay(i).length;
+      html += '<button data-calday="' + i + '" style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0 7px;border:1px solid ' + (on ? '#e8312a' : 'transparent') + ';background:' + (on ? '#fdecea' : 'transparent') + ';cursor:pointer;transition:background .2s,border-color .2s">'
+        + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;letter-spacing:.1em;color:' + (isToday ? '#e8312a' : '#b3b3ae') + '">' + DOW[i] + '</span>'
+        + '<span style="font-size:14px;font-weight:600;color:' + (isToday ? '#e8312a' : '#0d0d0d') + '">' + d.getDate() + '</span>'
+        + '<span style="width:5px;height:5px;border-radius:50%;background:' + (n ? '#e8312a' : 'transparent') + '"></span>'
+        + '</button>';
+    });
+    html += '</div>';
+
+    const list = forDay(sel);
+    if (!list.length) {
+      html += '<div style="padding:34px 20px;text-align:center;color:#7d7d7d;font-size:14px">Nothing booked on ' + e(days[sel].toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })) + '.</div>';
+    } else {
+      list.forEach(b => {
+        const skin = b.status === 'completed' ? 'background:#f0f0ee;border-color:#c8c8c2' : b.status === 'pending' ? 'background:#fff8e8;border-color:#d98a00' : 'background:#fdecea;border-color:#e8312a';
+        html += '<button data-block="' + b.id + '" style="display:flex;gap:12px;width:100%;text-align:left;padding:13px 16px;border:0;border-bottom:1px solid #ededea;background:none;cursor:pointer">'
+          + '<span style="flex-shrink:0;width:52px;font-family:\'JetBrains Mono\',monospace;font-size:11.5px;color:#5f5f5f;padding-top:6px">' + e(b.start) + '<br><span style="color:#b3b3ae">' + e(b.end) + '</span></span>'
+          + '<span style="flex:1;min-width:0;border-left:3px solid;' + skin + ';padding:8px 11px">'
+          + '<span style="display:block;font-size:14px;font-weight:600">' + e(b.service) + '</span>'
+          + '<span style="display:block;font-size:13px;color:#5f5f5f;margin-top:2px">' + e(b.name) + ' · ' + e(b.staff) + '</span>'
+          + '</span></button>';
+      });
+    }
+
+    grid.style.display = 'block';
+    grid.style.minWidth = '0';
+    grid.innerHTML = html;
+    grid.querySelectorAll('[data-calday]').forEach(el => el.addEventListener('click', () => {
+      this.calDay = +el.dataset.calday;
+      this.renderCal();
+    }));
+    grid.querySelectorAll('[data-block]').forEach(el => el.addEventListener('click', () => this.openBooking(el.dataset.block)));
+  }
+
+  renderBookingsMobile(box) {
+    const e = this.esc;
+    const filter = (document.querySelector('[data-bkfilter]') || {}).value || 'upcoming';
+    const todayIdx = (new Date().getDay() + 6) % 7;
+    let rows = BOOKINGS.slice();
+    if (filter === 'today') rows = rows.filter(b => b.off === Math.min(todayIdx, 5));
+    else if (filter === 'upcoming') rows = rows.filter(b => b.status !== 'completed');
+    rows.sort((a, b) => (a.off - b.off) || a.start.localeCompare(b.start));
+    const monday = this.thisMonday();
+    const dateOf = off => { const d = new Date(monday); d.setDate(d.getDate() + off); return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); };
+    const fmt = s => { const [h, m] = s.split(':').map(Number); return ((h % 12) || 12) + ':' + String(m).padStart(2, '0') + (h < 12 ? ' AM' : ' PM'); };
+    const chip = 'display:inline-block;padding:4px 10px;font-family:\'JetBrains Mono\',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;';
+
+    box.style.minWidth = '0';
+    if (!rows.length) {
+      box.innerHTML = '<div style="padding:36px;text-align:center;color:#7d7d7d;font-size:14px">No bookings in this view.</div>';
+      return;
+    }
+    // One card per booking: seven table columns do not survive a phone.
+    box.innerHTML = rows.map(b =>
+      '<div style="padding:16px;border-bottom:1px solid #ededea">'
+      + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">'
+      + '<span style="font-size:14px;font-weight:600">' + e(dateOf(b.off)) + '</span>'
+      + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:11.5px;color:#7d7d7d;text-align:right">' + e(fmt(b.start)) + ' – ' + e(fmt(b.end)) + '</span>'
+      + '</div>'
+      + '<div style="margin-top:9px;font-size:14.5px">' + e(b.service) + ' <span style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:#7d7d7d">$' + b.price + '</span></div>'
+      + '<div style="margin-top:4px;font-size:13.5px;color:#5f5f5f">' + e(b.name) + ' · <span style="font-family:\'JetBrains Mono\',monospace;font-size:12px">' + e(b.phone) + '</span></div>'
+      + '<div style="margin-top:3px;font-size:13px;color:#7d7d7d">' + e(b.staff) + '</div>'
+      + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:13px">'
+      + '<span style="' + chip + STATUS_STYLE[b.status] + '">' + e(b.status) + '</span>'
+      + '<span style="' + chip + (PAY_STYLE[b.pay] || '') + '">' + e(b.pay) + '</span>'
+      + '<span style="flex:1"></span>'
+      + '<button data-open="' + b.id + '" style="padding:8px 15px;border:1px solid #d6d6d2;background:#fff;font-size:12.5px;font-weight:500;color:#0d0d0d;cursor:pointer">Open</button>'
+      + '</div></div>').join('');
+    box.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => this.openBooking(btn.dataset.open)));
+  }
+
+"""
+
+# These four insert around anchors that survive the edit, so each carries a
+# sentinel (4th field) marking work already done -- without it a second run
+# would insert the methods and branches twice.
+DASHBOARD_FIXES = [
+    (
+        "mobile renderers not yet defined on the component",
+        "  renderCal() {",
+        DASHBOARD_MOBILE_JS + "  renderCal() {",
+        "  panelWidth() {",
+    ),
+    (
+        "layout minimums not declared",
+        "const STATUS_STYLE = {",
+        "// Width each desktop layout needs before it starts scrolling sideways;\n"
+        "// below these the panel renders its stacked mobile layout instead.\n"
+        "const CAL_MIN = 880, BK_MIN = 760;\n\n"
+        "const STATUS_STYLE = {",
+        "const CAL_MIN = 880",
+    ),
+    (
+        "resize handling not wired into mount",
+        "    this.controls();\n  }",
+        "    this.controls();\n    this.responsive();\n  }",
+        "    this.responsive();",
+    ),
+    (
+        "calendar has no mobile branch",
+        "    const grid = document.querySelector('[data-calgrid]');\n"
+        "    if (!grid) return;",
+        "    const grid = document.querySelector('[data-calgrid]');\n"
+        "    if (!grid) return;\n"
+        "    if (this.panelWidth() < CAL_MIN) return this.renderCalMobile(grid);\n"
+        "    grid.style.display = 'grid';\n"
+        "    grid.style.minWidth = CAL_MIN + 'px';",
+        "return this.renderCalMobile(grid);",
+    ),
+    (
+        "bookings have no mobile branch",
+        "    const box = document.querySelector('[data-bktable]');\n"
+        "    if (!box) return;",
+        "    const box = document.querySelector('[data-bktable]');\n"
+        "    if (!box) return;\n"
+        "    if (this.panelWidth() < BK_MIN) return this.renderBookingsMobile(box);\n"
+        "    box.style.minWidth = BK_MIN + 'px';",
+        "return this.renderBookingsMobile(box);",
+    ),
+]
+
+# LazusAI provisions a dedicated iMessage number; it does not take over a number
+# the business already has. These edits drop the copy that promised otherwise.
+# The matching FAQ entry is removed outright by FAQ_REMOVALS below.
+HOME_COPY_FIXES = [
+    (
+        "hero checklist claims it works with an existing number",
+        "WORKS WITH YOUR NUMBER",
+        "DEDICATED iMESSAGE NUMBER",
+    ),
+    (
+        "setup step titled 'Connect your number'",
+        ">Connect your number</h3>",
+        ">We set up your number</h3>",
+    ),
+    (
+        "setup step offers to keep an existing number",
+        "Keep your existing business number or get a new one. "
+        "We handle the iMessage setup end to end.",
+        "We provision a dedicated iMessage number for your business "
+        "and handle the setup end to end.",
+    ),
+]
+
+PRICING_COPY_FIXES = [
+    (
+        "cancellation answer promises you keep your number",
+        "month-to-month. You keep your number, and your conversation history "
+        "and leads export in one click.",
+        "month-to-month. Your conversation history and leads export in "
+        "one click.",
+    ),
+]
+
+# FAQ entries to drop entirely, keyed by a phrase in the question.
+FAQ_REMOVALS = {
+    "index.html": ["Does it work with my existing phone number?"],
+    "LazusAI Site.dc.html": ["Does it work with my existing phone number?"],
+}
+
 MARKUP_FIXES = {
-    "index.html": HOME_FIXES,
-    "LazusAI Site.dc.html": HOME_FIXES,
+    "index.html": HOME_FIXES + HOME_COPY_FIXES,
+    "LazusAI Site.dc.html": HOME_FIXES + HOME_COPY_FIXES,
     "Login.dc.html": LOGIN_FIXES,
+    "Pricing.dc.html": PRICING_COPY_FIXES,
+    "Dashboard.dc.html": DASHBOARD_FIXES,
 }
 
 RESPONSIVE_CSS = """
@@ -228,15 +437,43 @@ def strip_old_injector(page: str) -> str:
     return page[:start].rstrip().rstrip(";") + "\n" + page[end:]
 
 
+def remove_faq(tpl: str, question: str) -> str:
+    """Drop the whole <div data-faq> accordion entry asking `question`.
+
+    Entries are siblings of identical shape, so an entry runs from its own
+    opening tag to the next one. The last entry has no following sibling, so
+    fall back to the end of its containing div.
+    """
+    starts = [m.start() for m in re.finditer(r'<div data-faq="1"', tpl)]
+    for i, start in enumerate(starts):
+        end = starts[i + 1] if i + 1 < len(starts) else None
+        if question not in tpl[start : end if end is not None else len(tpl)]:
+            continue
+        if end is None:
+            end = tpl.index("</div>", tpl.index(question)) + len("</div>")
+        return tpl[:start] + tpl[end:]
+    return tpl
+
+
 def patch_template(tpl: str, name: str) -> tuple[str, list[str]]:
     warnings = []
 
     for old, new in ASPECT_FIXES.items():
         tpl = tpl.replace(old, new)
 
-    for desc, old, new in MARKUP_FIXES.get(name, []):
+    for question in FAQ_REMOVALS.get(name, []):
+        if question in tpl:
+            tpl = remove_faq(tpl, question)
+            if question in tpl:
+                warnings.append(f"could not remove FAQ entry: {question}")
+
+    for fix in MARKUP_FIXES.get(name, []):
+        desc, old, new = fix[0], fix[1], fix[2]
+        sentinel = fix[3] if len(fix) > 3 else None
+        if sentinel and sentinel in tpl:
+            continue
         if old in tpl:
-            tpl = tpl.replace(old, new)
+            tpl = tpl.replace(old, new, 1)
         elif new not in tpl:
             warnings.append(desc)
 
